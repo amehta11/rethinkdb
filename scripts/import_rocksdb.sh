@@ -11,7 +11,7 @@
 # Then, maybe, inspect the repo to see if there's new extraneous stuff
 # we don't want.
 #
-# Then test if `make -j33 static_lib` works.
+# Then test if `make -j8 static_lib` works.
 
 
 # Exit upon error
