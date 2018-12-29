@@ -1058,7 +1058,8 @@ void run_rethinkdb_create(const base_path_t &base_path,
     server_config.config.cache_size_bytes = total_cache_size;
     server_config.version = 1;
 
-    io_backender_t io_backender(direct_io_mode, max_concurrent_io_requests);
+    rockstore::store rocks = rockstore::create_rockstore(base_path);
+    io_backender_t io_backender(&rocks, direct_io_mode, max_concurrent_io_requests);
 
     perfmon_collection_t metadata_perfmon_collection;
     perfmon_membership_t metadata_perfmon_membership(&get_global_perfmon_collection(), &metadata_perfmon_collection, "metadata");
@@ -1156,9 +1157,8 @@ void run_rethinkdb_serve(const base_path_t &base_path,
 
     logNTC("Loading data from directory %s\n", base_path.path().c_str());
 
-    io_backender_t io_backender(direct_io_mode, max_concurrent_io_requests);
-
-    rockstore::store rockstore = rockstore::create_rockstore(base_path);
+    rockstore::store rocks = rockstore::create_rockstore(base_path);
+    io_backender_t io_backender(&rocks, direct_io_mode, max_concurrent_io_requests);
 
     perfmon_collection_t metadata_perfmon_collection;
     perfmon_membership_t metadata_perfmon_membership(&get_global_perfmon_collection(), &metadata_perfmon_collection, "metadata");
