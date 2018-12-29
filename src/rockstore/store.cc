@@ -3,11 +3,12 @@
 #include "rocksdb/db.h"
 
 #include "arch/runtime/thread_pool.hpp"
+#include "paths.hpp"
 
 namespace rockstore {
 
-store create_rockstore(const std::string &base_dir) {
-    std::string rocks_path = base_dir + "/rockstore";
+store create_rockstore(const base_path_t &base_path) {
+    std::string rocks_path = base_path.path() + "/rockstore";
     rocksdb::DB *db;
     rocksdb::Status status;
     linux_thread_pool_t::run_in_blocker_pool([&]() {

@@ -1158,6 +1158,8 @@ void run_rethinkdb_serve(const base_path_t &base_path,
 
     io_backender_t io_backender(direct_io_mode, max_concurrent_io_requests);
 
+    rockstore::store rockstore = rockstore::create_rockstore(base_path);
+
     perfmon_collection_t metadata_perfmon_collection;
     perfmon_membership_t metadata_perfmon_membership(&get_global_perfmon_collection(), &metadata_perfmon_collection, "metadata");
 
