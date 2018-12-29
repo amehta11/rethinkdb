@@ -2,10 +2,13 @@
 #ifndef CLUSTERING_ADMINISTRATION_PERSIST_FILE_HPP_
 #define CLUSTERING_ADMINISTRATION_PERSIST_FILE_HPP_
 
+#include "rocksdb/write_batch.h"
+
 #include "btree/operations.hpp"
 #include "buffer_cache/alt.hpp"
 #include "buffer_cache/types.hpp"
 #include "concurrency/rwlock.hpp"
+#include "containers/archive/string_stream.hpp"
 #include "rockstore/store.hpp"
 #include "serializer/types.hpp"
 
@@ -57,16 +60,17 @@ public:
                 const key_t<T> &key,
                 T *value_out,
                 signal_t *interruptor) {
-            bool found = false;
-            read_bin(
-                key.key,
-                [&](read_stream_t *bin_value) {
-                    archive_result_t res = deserialize<W>(bin_value, value_out);
-                    guarantee_deserialization(res, "metadata_file_t::read_txn_t::read");
-                    found = true;
-                },
-                interruptor);
-            return found;
+            // TODO: Remove interruptor param?
+            (void)interruptor;
+            std::pair<std::string, bool> value = read_bin(key.key);
+            if (!value.second) {
+                return false;
+            }
+            string_read_stream_t stream(std::move(value.first), 0);
+            // TODO: No need for W template param?
+            archive_result_t res = deserialize<W>(&stream, value_out);
+            guarantee_deserialization(res, "metadata_file_t::read_txn_t::read");
+            return true;
         }
 
         template<class T, cluster_version_t W = cluster_version_t::LATEST_DISK>
@@ -87,11 +91,6 @@ public:
                 interruptor);
         }
 
-    protected:
-        txn_t *get_txn() {
-            return &txn;
-        }
-
     private:
         friend class metadata_file_t;
 
@@ -103,10 +102,8 @@ public:
             const void *ref,
             const std::function<void(read_stream_t *)> &callback);
 
-        void read_bin(
-            const store_key_t &key,
-            const std::function<void(read_stream_t *)> &callback,
-            signal_t *interruptor);
+        std::pair<std::string, bool> read_bin(
+            const store_key_t &key);
 
         void read_many_bin(
             const store_key_t &key_prefix,
@@ -115,7 +112,6 @@ public:
             signal_t *interruptor);
 
         metadata_file_t *file;
-        txn_t txn;
         rwlock_acq_t rwlock_acq;
     };
 
@@ -143,11 +139,13 @@ public:
         // is not interrupted in the middle, which could leave the
         // metadata in an inconsistent state.
         void commit() {
-            get_txn()->commit();
+            file->rocks->write_batch(std::move(batch));
         }
 
     private:
         friend class metadata_file_t;
+
+        rocksdb::WriteBatch batch;
 
         void write_bin(
             const store_key_t &key,
@@ -177,6 +175,8 @@ private:
         perfmon_collection_t *perfmon_parent);
 
     static serializer_filepath_t get_filename(const base_path_t &path);
+
+    rockstore::store *rocks;
 
     scoped_ptr_t<merger_serializer_t> serializer;
     scoped_ptr_t<cache_balancer_t> balancer;

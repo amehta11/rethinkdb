@@ -1,6 +1,10 @@
 // Copyright 2010-2015 RethinkDB, all rights reserved.
 #include "clustering/administration/persist/file.hpp"
 
+#include "rocksdb/options.h"
+#include "rocksdb/write_batch.h"
+
+#include "arch/io/disk.hpp"
 #include "btree/depth_first_traversal.hpp"
 #include "btree/types.hpp"
 #include "buffer_cache/blob.hpp"
@@ -16,7 +20,12 @@
 #include "serializer/log/log_serializer.hpp"
 #include "serializer/merger.hpp"
 
+// TODO: Remove obsolete stuff like this.
 const uint64_t METADATA_CACHE_SIZE = 32 * MEGABYTE;
+
+const std::string METADATA_PREFIX = "rethinkdb/metadata/";
+const std::string METADATA_VERSION_KEY = "rethinkdb/metadata/version";
+const std::string METADATA_VERSION_VALUE = "v2_4";
 
 ATTR_PACKED(struct metadata_disk_superblock_t {
     block_magic_t magic;
@@ -162,7 +171,6 @@ metadata_file_t::read_txn_t::read_txn_t(
         metadata_file_t *f,
         signal_t *interruptor) :
     file(f),
-    txn(file->cache_conn.get(), read_access_t::read),
     rwlock_acq(&file->rwlock, access_t::read, interruptor)
     { }
 
@@ -171,7 +179,6 @@ metadata_file_t::read_txn_t::read_txn_t(
         write_access_t,
         signal_t *interruptor) :
     file(f),
-    txn(file->cache_conn.get(), write_durability_t::HARD, 1),
     rwlock_acq(&file->rwlock, access_t::write, interruptor)
     { }
 
@@ -193,64 +200,30 @@ void metadata_file_t::read_txn_t::blob_to_stream(
     callback(&read_stream);
 }
 
-void metadata_file_t::read_txn_t::read_bin(
-        const store_key_t &key,
-        const std::function<void(read_stream_t *)> &callback,
-        signal_t *interruptor) {
-    metadata_value_sizer_t sizer(file->cache->max_block_size());
-    buf_lock_t sb_lock(buf_parent_t(&txn), SUPERBLOCK_ID, access_t::read);
-    wait_interruptible(sb_lock.read_acq_signal(), interruptor);
-    metadata_superblock_t superblock(std::move(sb_lock));
-    keyvalue_location_t kvloc;
-    find_keyvalue_location_for_read(
-        &sizer,
-        &superblock,
-        key.btree_key(),
-        &kvloc,
-        &file->btree_stats,
-        nullptr);
-    if (kvloc.there_originally_was_value) {
-        blob_to_stream(buf_parent_t(&kvloc.buf), kvloc.value.get(), callback);
-    }
+std::pair<std::string, bool> metadata_file_t::read_txn_t::read_bin(
+        const store_key_t &key) {
+    return file->rocks->try_read(METADATA_PREFIX + key_to_unescaped_str(key));
 }
 
 void metadata_file_t::read_txn_t::read_many_bin(
         const store_key_t &key_prefix,
         const std::function<void(const std::string &key_suffix, read_stream_t *)> &cb,
         signal_t *interruptor) {
-    buf_lock_t sb_lock(buf_parent_t(&txn), SUPERBLOCK_ID, access_t::read);
-    wait_interruptible(sb_lock.read_acq_signal(), interruptor);
-    metadata_superblock_t superblock(std::move(sb_lock));
-    class : public depth_first_traversal_callback_t {
-    public:
-        continue_bool_t handle_pair(scoped_key_value_t &&kv, signal_t *) {
-            guarantee(kv.key()->size >= key_prefix.size());
-            guarantee(memcmp(
-                kv.key()->contents, key_prefix.contents(), key_prefix.size()) == 0);
-            std::string suffix(
-                reinterpret_cast<const char *>(kv.key()->contents + key_prefix.size()),
-                kv.key()->size - key_prefix.size());
-            txn->blob_to_stream(
-                kv.expose_buf(),
-                kv.value(),
-                [&](read_stream_t *s) { (*cb)(suffix, s); });
-            return continue_bool_t::CONTINUE;
-        }
-        read_txn_t *txn;
-        store_key_t key_prefix;
-        const std::function<void(const std::string &key_suffix, read_stream_t *)> *cb;
-    } dftcb;
-    dftcb.txn = this;
-    dftcb.key_prefix = key_prefix;
-    dftcb.cb = &cb;
-    btree_depth_first_traversal(
-        &superblock,
-        key_range_t::with_prefix(key_prefix),
-        &dftcb,
-        access_t::read,
-        FORWARD,
-        release_superblock_t::RELEASE,
-        interruptor);
+    // TODO: Use or remove interruptor.
+    (void)interruptor;
+    // TODO: Might there be any need to truly stream this?
+    std::vector<std::pair<std::string, std::string>> all
+        = file->rocks->read_all_prefixed(METADATA_PREFIX + key_to_unescaped_str(key_prefix));
+    const size_t prefix_size = key_prefix.size();
+    for (auto& p : all) {
+        guarantee(p.first.size() >= prefix_size);
+        guarantee(memcmp(p.first.data(), key_prefix.contents(), prefix_size) == 0);
+        std::string suffix = p.first.substr(prefix_size);
+        string_read_stream_t stream(std::move(p.second), 0);
+        cb(suffix, &stream);
+    }
+
+    return;
 }
 
 metadata_file_t::write_txn_t::write_txn_t(
@@ -263,36 +236,18 @@ void metadata_file_t::write_txn_t::write_bin(
         const store_key_t &key,
         const write_message_t *msg,
         signal_t *interruptor) {
-    metadata_value_sizer_t sizer(file->cache->max_block_size());
-    metadata_value_detacher_t detacher;
-    metadata_value_deleter_t deleter;
-    buf_lock_t sb_lock(buf_parent_t(&txn), SUPERBLOCK_ID, access_t::write);
-    wait_interruptible(sb_lock.write_acq_signal(), interruptor);
-    metadata_superblock_t superblock(std::move(sb_lock));
-    keyvalue_location_t kvloc;
-    find_keyvalue_location_for_write(
-        &sizer,
-        &superblock,
-        key.btree_key(),
-        repli_timestamp_t::distant_past,
-        &detacher,
-        &kvloc,
-        nullptr /* trace */);
-    if (kvloc.there_originally_was_value) {
-        deleter.delete_value(buf_parent_t(&kvloc.buf), kvloc.value.get());
-        kvloc.value.reset();
+    // TODO: Use or remove interruptor param.
+    (void)interruptor;
+    // TODO: Verify that we can stack writes and edletes on a rocksdb WriteBatch.
+    std::string rockskey = METADATA_PREFIX + key_to_unescaped_str(key);
+    if (msg == nullptr) {
+        batch.Delete(rockskey);
+    } else {
+        string_stream_t stream;
+        int res = send_write_message(&stream, msg);
+        guarantee(res == 0);
+        batch.Put(rockskey, stream.str());
     }
-    if (msg != nullptr) {
-        kvloc.value = scoped_malloc_t<void>(blob::btree_maxreflen);
-        memset(kvloc.value.get(), 0, blob::btree_maxreflen);
-        blob_t blob(file->cache->max_block_size(),
-                    static_cast<char *>(kvloc.value.get()),
-                    blob::btree_maxreflen);
-        write_onto_blob(buf_parent_t(&kvloc.buf), &blob, *msg);
-    }
-    null_key_modification_callback_t null_cb;
-    apply_keyvalue_change(&sizer, &kvloc, key.btree_key(), repli_timestamp_t::invalid,
-        &detacher, &null_cb, delete_mode_t::ERASE);
 }
 
 metadata_file_t::metadata_file_t(
@@ -300,6 +255,7 @@ metadata_file_t::metadata_file_t(
         const base_path_t &base_path,
         perfmon_collection_t *perfmon_parent,
         signal_t *interruptor) :
+    rocks(io_backender->rocks()),
     btree_stats(perfmon_parent, "metadata")
 {
     filepath_file_opener_t file_opener(get_filename(base_path), io_backender);
@@ -308,77 +264,16 @@ metadata_file_t::metadata_file_t(
     cache.init(new cache_t(serializer.get(), balancer.get(), perfmon_parent));
     cache_conn.init(new cache_conn_t(cache.get()));
 
-    /* Migrate data if necessary */
+    /* Do not migrate data if necessary */
     if (interruptor->is_pulsed()) {
         throw interrupted_exc_t();
     }
-    cond_t non_interruptor;
-    write_txn_t write_txn(this, &non_interruptor);
-    {
-        object_buffer_t<buf_lock_t> sb_lock;
-        sb_lock.create(
-            buf_parent_t(&write_txn.txn), SUPERBLOCK_ID, access_t::write);
-        object_buffer_t<buf_write_t> sb_write;
-        sb_write.create(sb_lock.get());
-        void *sb_data = sb_write->get_data_write();
 
-        cluster_version_t metadata_version =
-            magic_to_version(*static_cast<block_magic_t *>(sb_data));
-        switch (metadata_version) {
-        case cluster_version_t::v1_14: // fallthrough intentional
-        case cluster_version_t::v1_15: // fallthrough intentional
-        case cluster_version_t::v1_16: // fallthrough intentional
-        case cluster_version_t::v2_0: {
-            scoped_malloc_t<void> sb_copy(cache->max_block_size().value());
-            memcpy(sb_copy.get(), sb_data, cache->max_block_size().value());
-            init_metadata_superblock(sb_data, cache->max_block_size().value());
-            sb_write.reset();
-            sb_lock.reset();
-
-            logNTC("Migrating cluster metadata to v2.1");
-            migrate_cluster_metadata_to_v2_1(
-                io_backender, base_path,
-                buf_parent_t(&write_txn.txn), sb_copy.get(), &write_txn,
-                &non_interruptor);
-
-            // The metadata is now serialized using the latest serialization version
-            metadata_version = cluster_version_t::LATEST_DISK;
-        } // fallthrough intentional
-        case cluster_version_t::v2_1: // fallthrough intentional
-        case cluster_version_t::v2_2: {
-            if (sb_lock.has()) {
-                update_metadata_superblock_version(sb_data);
-                sb_write.reset();
-                sb_lock.reset();
-            }
-
-            logNTC("Migrating cluster metadata to v2.3");
-            migrate_metadata_v2_1_to_v2_3(
-                metadata_version, &write_txn, &non_interruptor);
-
-            // The metadata is now serialized using the latest serialization version
-            metadata_version = cluster_version_t::LATEST_DISK;
-        } // fallthrough intentional
-        case cluster_version_t::v2_3: {
-            if (sb_lock.has()) {
-                update_metadata_superblock_version(sb_data);
-                sb_write.reset();
-                sb_lock.reset();
-            }
-
-            logNTC("Migrating cluster metadata to v2.4");
-            migrate_metadata_v2_3_to_v2_4(
-                metadata_version, &write_txn, &non_interruptor);
-
-            // The metadata is now serialized using the latest serialization version
-            metadata_version = cluster_version_t::LATEST_DISK;
-        } // fallthrough intentional
-        case cluster_version_t::v2_4_is_latest:
-            break; // Up-to-date, do nothing
-        default: unreachable();
-        }
+    std::string metadata_version = rocks->read(METADATA_VERSION_KEY);
+    if (metadata_version != METADATA_VERSION_VALUE) {
+        // TODO
+        throw std::runtime_error("Unsupported metadata version");
     }
-    write_txn.commit();
 }
 
 metadata_file_t::metadata_file_t(
@@ -387,6 +282,7 @@ metadata_file_t::metadata_file_t(
         perfmon_collection_t *perfmon_parent,
         const std::function<void(write_txn_t *, signal_t *)> &initializer,
         signal_t *interruptor) :
+    rocks(io_backender->rocks()),
     btree_stats(perfmon_parent, "metadata")
 {
     filepath_file_opener_t file_opener(get_filename(base_path), io_backender);
@@ -398,18 +294,15 @@ metadata_file_t::metadata_file_t(
     cache.init(new cache_t(serializer.get(), balancer.get(), perfmon_parent));
     cache_conn.init(new cache_conn_t(cache.get()));
 
+    if (interruptor->is_pulsed()) {
+        throw interrupted_exc_t();
+    }
+
+    rocks->insert(METADATA_VERSION_KEY, METADATA_VERSION_VALUE);
+
     {
-        if (interruptor->is_pulsed()) {
-            throw interrupted_exc_t();
-        }
         cond_t non_interruptor;
         write_txn_t write_txn(this, &non_interruptor);
-        {
-            buf_lock_t sb_lock(&write_txn.txn, SUPERBLOCK_ID, alt_create_t::create);
-            buf_write_t sb_write(&sb_lock);
-            void *sb_data = sb_write.get_data_write();
-            init_metadata_superblock(sb_data, cache->max_block_size().value());
-        }
         initializer(&write_txn, &non_interruptor);
         write_txn.commit();
     }
