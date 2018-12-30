@@ -1068,7 +1068,6 @@ void run_rethinkdb_create(const base_path_t &base_path,
         cond_t non_interruptor;
         metadata_file_t metadata_file(
             &io_backender,
-            base_path,
             &metadata_perfmon_collection,
             [&](metadata_file_t::write_txn_t *write_txn, signal_t *interruptor) {
                 write_txn->write(mdkey_server_id(),
@@ -1169,7 +1168,6 @@ void run_rethinkdb_serve(const base_path_t &base_path,
         if (our_server_id != nullptr && cluster_metadata != nullptr) {
             metadata_file.init(new metadata_file_t(
                 &io_backender,
-                base_path,
                 &metadata_perfmon_collection,
                 [&](metadata_file_t::write_txn_t *write_txn, signal_t *interruptor) {
                     write_txn->write(mdkey_server_id(),
@@ -1189,7 +1187,6 @@ void run_rethinkdb_serve(const base_path_t &base_path,
         } else {
             metadata_file.init(new metadata_file_t(
                 &io_backender,
-                base_path,
                 &metadata_perfmon_collection,
                 &non_interruptor));
             /* The `metadata_file_t` constructor will migrate the main metadata if it

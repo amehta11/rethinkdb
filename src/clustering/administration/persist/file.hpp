@@ -43,6 +43,8 @@ public:
         store_key_t key;
     };
 
+    // This read_txn_t/write_txn_t stuff might be kind of obtuse and overengineered with
+    // the rocksdb backend -- but we are maintaining compatibility with older callers.
     class read_txn_t {
     public:
         read_txn_t(metadata_file_t *file, signal_t *interruptor);
@@ -96,11 +98,6 @@ public:
 
         /* This constructor is used by `write_txn_t` */
         read_txn_t(metadata_file_t *file, write_access_t, signal_t *interruptor);
-
-        void blob_to_stream(
-            buf_parent_t parent,
-            const void *ref,
-            const std::function<void(read_stream_t *)> &callback);
 
         std::pair<std::string, bool> read_bin(
             const store_key_t &key);
@@ -156,33 +153,19 @@ public:
     // Used to open an existing metadata file
     metadata_file_t(
         io_backender_t *io_backender,
-        const base_path_t &base_path,
         perfmon_collection_t *perfmon_parent,
         signal_t *interruptor);
 
     // Used top create a new metadata file
     metadata_file_t(
         io_backender_t *io_backender,
-        const base_path_t &base_path,
         perfmon_collection_t *perfmon_parent,
         const std::function<void(write_txn_t *, signal_t *)> &initializer,
         signal_t *interruptor);
     ~metadata_file_t();
 
 private:
-    void init_serializer(
-        filepath_file_opener_t *file_opener,
-        perfmon_collection_t *perfmon_parent);
-
-    static serializer_filepath_t get_filename(const base_path_t &path);
-
     rockstore::store *rocks;
-
-    scoped_ptr_t<merger_serializer_t> serializer;
-    scoped_ptr_t<cache_balancer_t> balancer;
-    scoped_ptr_t<cache_t> cache;
-    scoped_ptr_t<cache_conn_t> cache_conn;
-    btree_stats_t btree_stats;
     rwlock_t rwlock;
 };
 
