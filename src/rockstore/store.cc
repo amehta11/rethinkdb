@@ -7,6 +7,9 @@
 
 namespace rockstore {
 
+store::store(rocksdb::DB *db) : db_(db) {}
+store::store(store&& other) : db_(std::move(other.db_)) {}
+
 store create_rockstore(const base_path_t &base_path) {
     std::string rocks_path = base_path.path() + "/rockstore";
     rocksdb::DB *db;
@@ -22,6 +25,14 @@ store create_rockstore(const base_path_t &base_path) {
     }
     store ret(db);
     return ret;
+}
+
+store::~store() {
+    if (db_.has()) {
+        // TODO: At least log the status codes or something.
+        db_->SyncWAL();
+        db_->Close();
+    }
 }
 
 std::string store::read(const std::string &key) {
@@ -81,7 +92,14 @@ store::read_all_prefixed(std::string prefix) {
     return ret;
 }
 
-void store::insert(const std::string &key, const std::string &value) {
+rocksdb::WriteOptions to_rocks(const write_options &opts) {
+    rocksdb::WriteOptions ret;
+    ret.sync = opts.sync;
+    return ret;
+}
+
+void store::insert(const std::string &key, const std::string &value,
+                   const write_options &opts) {
     rocksdb::Status status;
     bool existed = false;
     linux_thread_pool_t::run_in_blocker_pool([&]() {
@@ -89,7 +107,7 @@ void store::insert(const std::string &key, const std::string &value) {
         std::string old;
         status = db_->Get(rocksdb::ReadOptions(), key, &old);
         if (status.IsNotFound()) {
-            status = db_->Put(rocksdb::WriteOptions(), key, value);
+            status = db_->Put(to_rocks(opts), key, value);
         } else if (status.ok()) {
             existed = true;
         }
@@ -105,10 +123,10 @@ void store::insert(const std::string &key, const std::string &value) {
     return;
 }
 
-void store::write_batch(rocksdb::WriteBatch&& batch) {
+void store::write_batch(rocksdb::WriteBatch&& batch, const write_options &opts) {
     rocksdb::Status status;
     linux_thread_pool_t::run_in_blocker_pool([&]() {
-        status = db_->Write(rocksdb::WriteOptions(), &batch);
+        status = db_->Write(to_rocks(opts), &batch);
     });
     if (!status.ok()) {
         // TODO

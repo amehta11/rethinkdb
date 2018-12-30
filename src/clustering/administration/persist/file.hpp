@@ -136,7 +136,7 @@ public:
         // is not interrupted in the middle, which could leave the
         // metadata in an inconsistent state.
         void commit() {
-            file->rocks->write_batch(std::move(batch));
+            file->rocks->write_batch(std::move(batch), file->rocks_options);
         }
 
     private:
@@ -165,6 +165,7 @@ public:
     ~metadata_file_t();
 
 private:
+    rockstore::write_options rocks_options;
     rockstore::store *rocks;
     rwlock_t rwlock;
 };

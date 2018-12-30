@@ -1,9 +1,6 @@
 // Copyright 2010-2015 RethinkDB, all rights reserved.
 #include "clustering/administration/persist/file.hpp"
 
-#include "rocksdb/options.h"
-#include "rocksdb/write_batch.h"
-
 #include "arch/io/disk.hpp"
 #include "btree/depth_first_traversal.hpp"
 #include "btree/types.hpp"
@@ -78,7 +75,7 @@ void metadata_file_t::write_txn_t::write_bin(
         signal_t *interruptor) {
     // TODO: Use or remove interruptor param.
     (void)interruptor;
-    // TODO: Verify that we can stack writes and edletes on a rocksdb WriteBatch.
+    // TODO: Verify that we can stack writes and deletes on a rocksdb WriteBatch.
     std::string rockskey = METADATA_PREFIX + key_to_unescaped_str(key);
     if (msg == nullptr) {
         batch.Delete(rockskey);
@@ -94,6 +91,7 @@ metadata_file_t::metadata_file_t(
         io_backender_t *io_backender,
         perfmon_collection_t *perfmon_parent,
         signal_t *interruptor) :
+    rocks_options(true),
     rocks(io_backender->rocks()) {
     // TODO: Remove or use interruptor.
     (void)interruptor;
@@ -113,6 +111,7 @@ metadata_file_t::metadata_file_t(
         perfmon_collection_t *perfmon_parent,
         const std::function<void(write_txn_t *, signal_t *)> &initializer,
         signal_t *interruptor) :
+    rocks_options(true),
     rocks(io_backender->rocks())
 {
     // TODO: Remove or use interruptor parameter.
@@ -120,7 +119,7 @@ metadata_file_t::metadata_file_t(
     // TODO: Make use of perfmon with rockstore, to track metadata writes.
     (void)perfmon_parent;
 
-    rocks->insert(METADATA_VERSION_KEY, METADATA_VERSION_VALUE);
+    rocks->insert(METADATA_VERSION_KEY, METADATA_VERSION_VALUE, rocks_options);
 
     {
         cond_t non_interruptor;
