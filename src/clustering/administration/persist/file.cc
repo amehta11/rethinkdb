@@ -50,13 +50,14 @@ void metadata_file_t::read_txn_t::read_many_bin(
         signal_t *interruptor) {
     // TODO: Use or remove interruptor.
     (void)interruptor;
+    std::string full_prefix = METADATA_PREFIX + key_to_unescaped_str(key_prefix);
     // TODO: Might there be any need to truly stream this?
     std::vector<std::pair<std::string, std::string>> all
-        = file->rocks->read_all_prefixed(METADATA_PREFIX + key_to_unescaped_str(key_prefix));
-    const size_t prefix_size = key_prefix.size();
+        = file->rocks->read_all_prefixed(full_prefix);
+    const size_t prefix_size = full_prefix.size();
     for (auto& p : all) {
         guarantee(p.first.size() >= prefix_size);
-        guarantee(memcmp(p.first.data(), key_prefix.contents(), prefix_size) == 0);
+        guarantee(memcmp(p.first.data(), full_prefix.data(), prefix_size) == 0);
         std::string suffix = p.first.substr(prefix_size);
         string_read_stream_t stream(std::move(p.second), 0);
         cb(suffix, &stream);
