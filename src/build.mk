@@ -122,7 +122,7 @@ ifeq ($(COMPILER), INTEL)
 else ifeq ($(COMPILER), CLANG)
   RT_CXXFLAGS += -Wformat=2 -Wswitch-enum -Wswitch-default # -Wno-unneeded-internal-declaration
   RT_CXXFLAGS += -Wused-but-marked-unused -Wundef -Wvla -Wshadow
-  RT_CXXFLAGS += -Wconditional-uninitialized -Wmissing-noreturn
+  RT_CXXFLAGS += -Wconditional-uninitialized # -Wmissing-noreturn
 else ifeq ($(COMPILER), GCC)
   ifeq ($(LEGACY_GCC), 1)
     RT_CXXFLAGS += -Wformat=2 -Wswitch-enum -Wswitch-default
