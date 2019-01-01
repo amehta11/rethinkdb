@@ -363,6 +363,7 @@ void set_superblock_metainfo(real_superblock_t *superblock,
     // Rocksdb metadata.
     rocksdb::WriteBatch batch;
     std::string meta_prefix = rockstore::table_metadata_prefix(table_id);
+    // TODO: Don't update version if it's already properly set.
     rocksdb::Status status = batch.Put(
         meta_prefix + rockstore::TABLE_METADATA_VERSION_KEY(),
         rockstore::VERSION());

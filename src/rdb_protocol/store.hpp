@@ -118,7 +118,6 @@ public:
             signal_t *interruptor)
         THROWS_ONLY(interrupted_exc_t);
 
-    // TODO implement rocks writing below.
     cluster_version_t metainfo_version(read_token_t *token,
                                        signal_t *interruptor);
 
@@ -140,6 +139,7 @@ public:
             signal_t *interruptor)
         THROWS_ONLY(interrupted_exc_t);
 
+    // TODO implement rocks writing below.
     void write(
             DEBUG_ONLY(const metainfo_checker_t& metainfo_checker, )
             const region_map_t<binary_blob_t>& new_metainfo,
