@@ -3,12 +3,15 @@
 #define BTREE_REQL_SPECIFIC_HPP_
 
 #include "btree/operations.hpp"
+#include "containers/uuid.hpp"
+
+namespace rockstore { class store; }
 
 /* Most of the code in the `btree/` directory doesn't "know" about the format of the
 superblock; instead it manipulates the superblock using the abstract `superblock_t`. This
 file provides the concrete superblock implementation used for ReQL primary and sindex
 B-trees. It also provides functions for working with the secondary index block and the
-metainfo, which are unrelated to the B-tree but stored on the ReQL primary superblock. 
+metainfo, which are unrelated to the B-tree but stored on the ReQL primary superblock.
 
 `btree/secondary_operations.*` and `btree/reql_specific.*` are the only files in the
 `btree/` directory that know about ReQL-specific concepts such as metainfo and sindexes.
@@ -39,7 +42,7 @@ private:
     For writes it locks the write superblock acquisition semaphore until the
     sb_buf_ is released.
     Note that this is used to throttle writes compared to reads, but not required
-    for correctness. */    
+    for correctness. */
     new_semaphore_in_line_t write_semaphore_acq_;
 
     buf_lock_t sb_buf_;
@@ -84,8 +87,10 @@ public:
     // alt_create_t::create) for use with btrees, setting the initial value of the
     // metainfo (with a single key/value pair). Not for use with sindex superblocks.
     static void init_real_superblock(real_superblock_t *superblock,
-                                const std::vector<char> &metainfo_key,
-                                const binary_blob_t &metainfo_value);
+            rockstore::store *rocks,
+            namespace_id_t table_id,
+            const std::vector<char> &metainfo_key,
+            const binary_blob_t &metainfo_value);
     static void init_sindex_superblock(sindex_superblock_t *superblock);
 
     btree_slice_t(cache_t *cache,
@@ -163,11 +168,15 @@ void get_superblock_metainfo(
     cluster_version_t *version_out);
 
 void set_superblock_metainfo(real_superblock_t *superblock,
+                             rockstore::store *rocks,
+                             namespace_id_t table_id,
                              const std::vector<char> &key,
                              const binary_blob_t &value,
                              cluster_version_t version);
 
 void set_superblock_metainfo(real_superblock_t *superblock,
+                             rockstore::store *rocks,
+                             namespace_id_t table_id,
                              const std::vector<std::vector<char> > &keys,
                              const std::vector<binary_blob_t> &values,
                              cluster_version_t version);
