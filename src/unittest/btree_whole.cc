@@ -150,7 +150,8 @@ public:
                 timestamp,
                 &deleter,
                 &kv_location,
-                &trace);
+                &trace,
+                superblock_t::no_passback);
 
             short_value_buffer_t buf(value);
             char *data = reinterpret_cast<char *>(buf.data());
@@ -192,7 +193,8 @@ public:
                 timestamp,
                 &deleter,
                 &kv_location,
-                &trace);
+                &trace,
+                superblock_t::no_passback);
 
             EXPECT_TRUE(kv_location.value.has());
 
