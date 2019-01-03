@@ -66,7 +66,7 @@ TPTEST(BTreeSindex, LowLevelOps) {
                 superblock->get_sindex_block_id(),
                 access_t::write);
 
-            initialize_secondary_indexes(&sindex_block);
+            initialize_secondary_indexes(io_backender.rocks(), table_id, &sindex_block);
         }
         txn->commit();
     }
@@ -98,7 +98,7 @@ TPTEST(BTreeSindex, LowLevelOps) {
                 superblock->get_sindex_block_id(),
                 access_t::write);
 
-            set_secondary_index(&sindex_block, name, s);
+            set_secondary_index(io_backender.rocks(), table_id, &sindex_block, name, s);
         }
         txn->commit();
     }
