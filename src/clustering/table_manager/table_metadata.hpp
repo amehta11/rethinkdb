@@ -12,8 +12,6 @@
 #include "containers/optional.hpp"
 #include "rpc/mailbox/typed.hpp"
 
-namespace rockstore { class store; }
-
 /* Every message to the `action_mailbox` has an `multi_table_manager_timestamp_t`
 attached. This is used to filter out outdated instructions. */
 class multi_table_manager_timestamp_t {

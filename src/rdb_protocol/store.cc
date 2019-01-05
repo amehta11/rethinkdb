@@ -45,8 +45,7 @@ void store_t::note_reshard(const region_t &shard_region) {
 }
 
 reql_version_t update_sindex_last_compatible_version(
-        rockstore::store *rocks,
-        namespace_id_t table_id,
+        rockshard rocksh,
         secondary_index_t *sindex,
         buf_lock_t *sindex_block) {
     sindex_disk_info_t sindex_info;
@@ -71,7 +70,7 @@ reql_version_t update_sindex_last_compatible_version(
 
         sindex->opaque_definition = stream.vector();
 
-        ::set_secondary_index(rocks, table_id, sindex_block, sindex->id, *sindex);
+        ::set_secondary_index(rocksh, sindex_block, sindex->id, *sindex);
     }
 
     return res;
@@ -103,7 +102,7 @@ void store_t::help_construct_bring_sindexes_up_to_date() {
     superblock.reset();
 
     // Migrate the secondary index block
-    migrate_secondary_index_block(rocks, table_id, &sindex_block);
+    migrate_secondary_index_block(rocksh(), &sindex_block);
 
     auto clear_sindex = [this](uuid_u sindex_id,
                                auto_drainer_t::lock_t store_keepalive) {
@@ -826,8 +825,7 @@ struct rdb_write_visitor_t : public boost::static_visitor<void> {
 
         response->response =
             rdb_batched_replace(
-                store->rocks,
-                store->get_table_id(),
+                store->rocksh(),
                 btree_info_t(btree, timestamp, datum_string_t(br.pkey)),
                 std::move(superblock),
                 br.keys,
@@ -857,8 +855,7 @@ struct rdb_write_visitor_t : public boost::static_visitor<void> {
         }
         response->response =
             rdb_batched_replace(
-                store->rocks,
-                store->get_table_id(),
+                store->rocksh(),
                 btree_info_t(btree, timestamp, datum_string_t(bi.pkey)),
                 std::move(superblock),
                 keys,
@@ -879,7 +876,7 @@ struct rdb_write_visitor_t : public boost::static_visitor<void> {
 
         rdb_live_deletion_context_t deletion_context;
         rdb_modification_report_t mod_report(w.key);
-        rdb_set(store->rocks, store->get_table_id(),
+        rdb_set(store->rocksh(),
                 w.key, w.data, w.overwrite, btree, timestamp, superblock.get(),
                 &deletion_context, res, &mod_report.info, trace, superblock_t::no_passback);
 
@@ -896,7 +893,7 @@ struct rdb_write_visitor_t : public boost::static_visitor<void> {
 
         rdb_live_deletion_context_t deletion_context;
         rdb_modification_report_t mod_report(d.key);
-        rdb_delete(store->rocks, store->get_table_id(),
+        rdb_delete(store->rocksh(),
                 d.key, btree, timestamp, superblock.get(), &deletion_context,
                 delete_mode_t::REGULAR_QUERY, res, &mod_report.info, trace, superblock_t::no_passback);
 

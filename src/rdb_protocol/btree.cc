@@ -278,8 +278,7 @@ private:
 };
 
 batched_replace_response_t rdb_replace_and_return_superblock(
-    rockstore::store *rocks,
-    namespace_id_t table_id,
+    rockshard rocksh,
     const btree_loc_info_t &info,
     const one_replace_t *replacer,
     const deletion_context_t *deletion_context,
@@ -333,17 +332,17 @@ batched_replace_response_t rdb_replace_and_return_superblock(
                 return resp;
             }
 
-            std::string rocks_kv_location = rockstore::table_primary_key(table_id, key_to_unescaped_str(*info.key));
+            std::string rocks_kv_location = rockstore::table_primary_key(rocksh.table_id, rocksh.shard_no, key_to_unescaped_str(*info.key));
             /* Now that the change has passed validation, write it to disk */
             if (new_val.get_type() == ql::datum_t::R_NULL) {
-                kv_location_delete(rocks, rocks_kv_location,
+                kv_location_delete(rocksh.rocks, rocks_kv_location,
                                    &kv_location, *info.key, info.btree->timestamp,
                                    deletion_context, delete_mode_t::REGULAR_QUERY,
                                    mod_info_out);
             } else {
                 r_sanity_check(new_val.get_field(primary_key, ql::NOTHROW).has());
                 ql::serialization_result_t res =
-                    kv_location_set(rocks, rocks_kv_location,
+                    kv_location_set(rocksh.rocks, rocks_kv_location,
                                     &kv_location, *info.key, new_val,
                                     info.btree->timestamp, deletion_context,
                                     mod_info_out);
@@ -451,8 +450,7 @@ ql::datum_t btree_batched_replacer_t::apply_write_hook(
 
 void do_a_replace_from_batched_replace(
     auto_drainer_t::lock_t,
-    rockstore::store *store,
-    namespace_id_t table_id,
+    rockshard rocksh,
     fifo_enforcer_sink_t *batched_replaces_fifo_sink,
     const fifo_enforcer_write_token_t &batched_replaces_fifo_token,
     btree_loc_info_t &&info,
@@ -475,7 +473,7 @@ void do_a_replace_from_batched_replace(
     rdb_live_deletion_context_t deletion_context;
     rdb_modification_report_t mod_report(*info.key);
     ql::datum_t res = rdb_replace_and_return_superblock(
-        store, table_id, std::move(info), &one_replace, &deletion_context, superblock_promise, &mod_report.info,
+        rocksh, std::move(info), &one_replace, &deletion_context, superblock_promise, &mod_report.info,
         trace);
     *stats_out = (*stats_out).merge(res, ql::stats_merge, limits, conditions);
 
@@ -485,13 +483,11 @@ void do_a_replace_from_batched_replace(
     new_mutex_in_line_t sindex_spot = mod_cb->get_in_line_for_sindex();
 
     mod_cb->on_mod_report(
-        store, table_id,
-        mod_report, update_pkey_cfeeds, &sindex_spot, &stamp_spot);
+        rocksh, mod_report, update_pkey_cfeeds, &sindex_spot, &stamp_spot);
 }
 
 batched_replace_response_t rdb_batched_replace(
-    rockstore::store *rocks,
-    namespace_id_t table_id,
+    rockshard rocksh,
     const btree_info_t &info,
     scoped_ptr_t<real_superblock_t> &&superblock,
     const std::vector<store_key_t> &keys,
@@ -540,8 +536,7 @@ batched_replace_response_t rdb_batched_replace(
                 promise_t<superblock_t *> superblock_promise;
                 coro_queue.push(
                     [lock = auto_drainer_t::lock_t(&drainer),
-                     rocks,
-                     table_id,
+                     rocksh,
                      &sink,
                      source_token = source.enter_write(),
                      info = btree_loc_info_t(&info, current_superblock.release(), &keys[i]),
@@ -555,8 +550,7 @@ batched_replace_response_t rdb_batched_replace(
                      &conditions]() mutable {
                         do_a_replace_from_batched_replace(
                             lock,
-                            rocks,
-                            table_id,
+                            rocksh,
                             &sink,
                             source_token,
                             std::move(info),
@@ -589,8 +583,7 @@ batched_replace_response_t rdb_batched_replace(
     return std::move(out).to_datum();
 }
 
-void rdb_set(rockstore::store *rocks,
-             namespace_id_t table_id,
+void rdb_set(rockshard rocksh,
              const store_key_t &key,
              ql::datum_t data,
              bool overwrite,  /* TODO: Who calls this with and without overwrite? */
@@ -621,10 +614,10 @@ void rdb_set(rockstore::store *rocks,
     mod_info->added.first = data;
 
     if (overwrite || !had_value) {
-        std::string rocks_kv_location = rockstore::table_primary_key(table_id, key_to_unescaped_str(key));
+        std::string rocks_kv_location = rockstore::table_primary_key(rocksh.table_id, rocksh.shard_no, key_to_unescaped_str(key));
         // TODO: We don't do kv_location_delete in case of null value?
         ql::serialization_result_t res =
-            kv_location_set(rocks, rocks_kv_location,
+            kv_location_set(rocksh.rocks, rocks_kv_location,
                             &kv_location, key, data, timestamp, deletion_context,
                             mod_info);
         if (res & ql::serialization_result_t::ARRAY_TOO_BIG) {
@@ -642,8 +635,7 @@ void rdb_set(rockstore::store *rocks,
         (had_value ? point_write_result_t::DUPLICATE : point_write_result_t::STORED);
 }
 
-void rdb_delete(rockstore::store *rocks,
-                namespace_id_t table_id,
+void rdb_delete(rockshard rocksh,
                 const store_key_t &key,
                 btree_slice_t *slice,
                 repli_timestamp_t timestamp,
@@ -668,8 +660,8 @@ void rdb_delete(rockstore::store *rocks,
         // TODO: Make the reading use rockstore.
         mod_info->deleted.first = get_data(kv_location.value_as<rdb_value_t>(),
                                            buf_parent_t(&kv_location.buf));
-        std::string rocks_kv_location = rockstore::table_primary_key(table_id, key_to_unescaped_str(key));
-        kv_location_delete(rocks, rocks_kv_location, &kv_location, key, timestamp, deletion_context,
+        std::string rocks_kv_location = rockstore::table_primary_key(rocksh.table_id, rocksh.shard_no, key_to_unescaped_str(key));
+        kv_location_delete(rocksh.rocks, rocks_kv_location, &kv_location, key, timestamp, deletion_context,
             delete_mode, mod_info);
         guarantee(!mod_info->deleted.second.empty() && mod_info->added.second.empty());
     }
@@ -1481,8 +1473,7 @@ rwlock_in_line_t rdb_modification_report_cb_t::get_in_line_for_cfeed_stamp() {
 }
 
 void rdb_modification_report_cb_t::on_mod_report(
-    rockstore::store *store,
-    namespace_id_t table_id,
+    rockshard rocksh,
     const rdb_modification_report_t &report,
     bool update_pkey_cfeeds,
     new_mutex_in_line_t *sindex_spot,
@@ -1496,8 +1487,7 @@ void rdb_modification_report_cb_t::on_mod_report(
         coro_t::spawn_now_dangerously(
             std::bind(&rdb_modification_report_cb_t::on_mod_report_sub,
                       this,
-                      store,
-                      table_id,
+                      rocksh,
                       report,
                       sindex_spot,
                       &keys_available_cond,
@@ -1549,8 +1539,7 @@ void rdb_modification_report_cb_t::on_mod_report(
 }
 
 void rdb_modification_report_cb_t::on_mod_report_sub(
-    rockstore::store *rocks,
-    namespace_id_t table_id,
+    rockshard rocksh,
     const rdb_modification_report_t &mod_report,
     new_mutex_in_line_t *spot,
     cond_t *keys_available_cond,
@@ -1559,8 +1548,7 @@ void rdb_modification_report_cb_t::on_mod_report_sub(
     index_vals_t *cfeed_new_keys_out) {
     store_->sindex_queue_push(mod_report, spot);
     rdb_live_deletion_context_t deletion_context;
-    rdb_update_sindexes(rocks,
-                        table_id,
+    rdb_update_sindexes(rocksh,
                         store_,
                         sindexes_,
                         &mod_report,
@@ -1835,8 +1823,7 @@ void deserialize_sindex_info_or_crash(
 
 /* Used below by rdb_update_sindexes. */
 void rdb_update_single_sindex(
-        rockstore::store *rocks,
-        namespace_id_t table_id,
+        rockshard rocksh,
         store_t *store,
         const store_t::sindex_access_t *sindex,
         const deletion_context_t *deletion_context,
@@ -1913,8 +1900,8 @@ void rdb_update_single_sindex(
 
                     if (kv_location.value.has()) {
                         kv_location_delete(
-                            rocks,
-                            rockstore::table_secondary_key(table_id, sindex->sindex.id, key_to_unescaped_str(it->first.btree_key())),
+                            rocksh.rocks,
+                            rockstore::table_secondary_key(rocksh.table_id, rocksh.shard_no, sindex->sindex.id, key_to_unescaped_str(it->first.btree_key())),
                             &kv_location,
                             it->first,
                             repli_timestamp_t::distant_past,
@@ -1996,8 +1983,8 @@ void rdb_update_single_sindex(
                     // so that we can have a reference to the primary key instead.
                     ql::serialization_result_t res =
                         kv_location_set_secondary(
-                            rocks,
-                            rockstore::table_secondary_key(table_id, sindex->sindex.id, key_to_unescaped_str(it->first.btree_key())),
+                            rocksh.rocks,
+                            rockstore::table_secondary_key(rocksh.table_id, rocksh.shard_no, sindex->sindex.id, key_to_unescaped_str(it->first.btree_key())),
                             modification->info.added.first /* copy of the value here */,
                             &kv_location, it->first,
                             modification->info.added.second,
@@ -2055,8 +2042,7 @@ void rdb_update_single_sindex(
 }
 
 void rdb_update_sindexes(
-    rockstore::store *rocks,
-    namespace_id_t table_id,
+    rockshard rocksh,
     store_t *store,
     const store_t::sindex_access_vector_t &sindexes,
     const rdb_modification_report_t *modification,
@@ -2095,8 +2081,7 @@ void rdb_update_sindexes(
                 coro_t::spawn_sometime(
                     std::bind(
                         &rdb_update_single_sindex,
-                        rocks,
-                        table_id,
+                        rocksh,
                         store,
                         sindex.get(),
                         actual_deletion_context,
@@ -2190,8 +2175,7 @@ public:
             new_mutex_acq_t wtxn_acq(&wtxn_lock_, interruptor_);
             guarantee(wtxn_.has());
             const rdb_post_construction_deletion_context_t deletion_context;
-            rdb_update_sindexes(store_->rocks,
-                                store_->get_table_id(),
+            rdb_update_sindexes(store_->rocksh(),
                                 store_,
                                 sindexes_,
                                 &mod_report,
