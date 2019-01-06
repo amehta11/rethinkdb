@@ -447,6 +447,7 @@ void server_t::add_limit_client(
         lspot.read_signal()->wait_lazily_unordered();
         auto *vec = &it->second.limit_clients[spec.range.sindex];
         auto lm = make_scoped<limit_manager_t>(
+            parent->rocksh(),
             &spot,
             region,
             table,
@@ -854,6 +855,7 @@ void limit_manager_t::send(msg_t &&msg) {
 }
 
 limit_manager_t::limit_manager_t(
+    rockshard _rocksh,
     rwlock_in_line_t *clients_lock,
     region_t _region,
     std::string _table,
@@ -870,6 +872,7 @@ limit_manager_t::limit_manager_t(
       table(std::move(_table)),
       sindex_id(std::move(_sindex_id)),
       uuid(std::move(_uuid)),
+      rocksh(_rocksh),
       parent(_parent),
       parent_client(std::move(_parent_client)),
       spec(std::move(_spec)),
@@ -938,14 +941,16 @@ void limit_manager_t::del(
 
 class ref_visitor_t : public boost::static_visitor<std::vector<item_t>> {
 public:
-    ref_visitor_t(env_t *_env,
+    ref_visitor_t(rockshard _rocksh,
+                  env_t *_env,
                   std::vector<scoped_ptr_t<op_t> > *_ops,
                   const key_range_t *_pk_range,
                   const keyspec_t::limit_t *_spec,
                   sorting_t _sorting,
                   optional<item_t> _start,
                   const item_queue_t *_item_queue)
-        : env(_env),
+        : rocksh(_rocksh),
+          env(_env),
           ops(_ops),
           pk_range(_pk_range),
           spec(_spec),
@@ -976,6 +981,7 @@ public:
         }
         size_t n = spec->limit - item_queue->size();
         rdb_rget_slice(
+            rocksh,
             ref.btree,
             region_t(),
             range,
@@ -1100,6 +1106,7 @@ public:
     }
 
 private:
+    rockshard rocksh;
     env_t *env;
     std::vector<scoped_ptr_t<op_t> > *ops;
     const key_range_t *pk_range;
@@ -1114,7 +1121,7 @@ std::vector<item_t> limit_manager_t::read_more(
     const optional<item_t> &start) {
     guarantee(item_queue.size() < spec.limit);
     ref_visitor_t visitor(
-        env.get(), &ops, &region.inner, &spec, spec.range.sorting, start, &item_queue);
+        rocksh, env.get(), &ops, &region.inner, &spec, spec.range.sorting, start, &item_queue);
     return boost::apply_visitor(visitor, ref);
 }
 
