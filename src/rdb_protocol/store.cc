@@ -526,6 +526,8 @@ struct rdb_read_visitor_t : public boost::static_visitor<void> {
 
         guarantee(geo_read.sindex.region);
         rdb_get_intersecting_slice(
+            store->rocksh(),
+            sindex_uuid,
             store->get_sindex_slice(sindex_uuid),
             geo_read.region, // This happens to always be the shard for geo reads.
             geo_read.query_geometry,
@@ -581,6 +583,8 @@ struct rdb_read_visitor_t : public boost::static_visitor<void> {
         }
 
         rdb_get_nearest_slice(
+            store->rocksh(),
+            sindex_uuid,
             store->get_sindex_slice(sindex_uuid),
             geo_read.center,
             geo_read.max_dist,
