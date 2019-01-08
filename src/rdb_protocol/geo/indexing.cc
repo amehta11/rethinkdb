@@ -156,7 +156,6 @@ formatted sindex key. */
 S2CellId btree_key_to_s2cellid(const btree_key_t *key) {
     rassert(key != NULL);
     std::string tmp(reinterpret_cast<const char *>(key->contents), key->size);
-    tmp[0] |= 0x80;
     return key_to_s2cellid(
         datum_t::extract_secondary(tmp));
 }
@@ -454,9 +453,19 @@ bool geo_index_traversal_helper_t::skip_forward_to_seek_key(std::string *pos) co
 
     // TODO: We parse this twice, I'm pretty sure.
     store_key_t skey(*pos);
-    // TODO: This is a total TOTAL hack.  There is presumably some function to use.
-    // TODO: Figure out how sindex ranges are generated for e.g. between queries, and where they get the 0x80.
-    geo::S2CellId pos_cell = btree_key_to_s2cellid(skey.btree_key());
+
+    // TODO: Fragile code.
+    geo::S2CellId pos_cell;
+    if (*pos < "GC") {
+        // The minimal cell id.
+        pos_cell = geo::S2CellId(1);
+    } else if (*pos < "GD") {
+        // TODO: This is a total TOTAL hack.  There is presumably some function to use.
+        // TODO: Figure out how sindex ranges are generated for e.g. between queries, and where they get the 0x80.
+        pos_cell = btree_key_to_s2cellid(skey.btree_key());
+    } else {
+        return false;
+    }
 
     {
         auto it = std::lower_bound(qcells.begin(), qcells.end(), pos_cell);
