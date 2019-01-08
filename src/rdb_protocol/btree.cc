@@ -1617,7 +1617,9 @@ void rdb_get_intersecting_slice(
         query_geometry,
         response);
 
-    continue_bool_t cont = geo_traversal(rocksh, sindex_uuid, superblock, sindex_range, &callback);
+    continue_bool_t cont = geo_traversal(
+        rocksh, sindex_uuid, superblock, release_superblock_t::RELEASE,
+        sindex_range, &callback);
     callback.finish(cont);
 }
 
@@ -1659,8 +1661,10 @@ void rdb_get_nearest_slice(
                                   sindex_func_reql_version, sindex_info.multi),
                 ql_env,
                 &state);
+            // TODO: We could create a rocks iterator (or snapshot) out here, and pass that in, instead of
+            // holding on to the superblock.
             geo_traversal(
-                rocksh, sindex_uuid, superblock, key_range_t::universe(), &callback);
+                rocksh, sindex_uuid, superblock, release_superblock_t::KEEP, key_range_t::universe(), &callback);
             callback.finish(&partial_response);
         } catch (const geo_exception_t &e) {
             partial_response.results_or_error =

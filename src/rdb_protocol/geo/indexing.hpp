@@ -102,8 +102,11 @@ private:
 };
 
 continue_bool_t geo_traversal(
-        rockshard rocksh, uuid_u sindex_uuid,
-        sindex_superblock_t *superblock, const key_range_t &sindex_range,
+        rockshard rocksh,
+        uuid_u sindex_uuid,
+        sindex_superblock_t *superblock,
+        release_superblock_t release_superblock,
+        const key_range_t &sindex_range,
         geo_index_traversal_helper_t *helper);
 
 

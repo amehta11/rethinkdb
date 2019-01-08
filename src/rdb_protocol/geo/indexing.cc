@@ -496,8 +496,11 @@ bool geo_index_traversal_helper_t::skip_forward_to_seek_key(std::string *pos) co
 
 
 continue_bool_t geo_traversal(
-        rockshard rocksh, uuid_u sindex_uuid,
-        sindex_superblock_t *superblock, const key_range_t &sindex_range,
+        rockshard rocksh,
+        uuid_u sindex_uuid,
+        sindex_superblock_t *superblock,
+        release_superblock_t release_superblock,
+        const key_range_t &sindex_range,
         geo_index_traversal_helper_t *helper) {
     std::string rocks_kv_prefix = rockstore::table_secondary_prefix(rocksh.table_id, rocksh.shard_no, sindex_uuid);
 
@@ -531,7 +534,9 @@ continue_bool_t geo_traversal(
     // TODO: Switching threads for every key/value pair is kind of lame.
     scoped_ptr_t<rocksdb::Iterator> iter(db->NewIterator(opts));
     // Release superblock after snapshotted iterator created.
-    superblock->release();
+    if (release_superblock == release_superblock_t::RELEASE) {
+        superblock->release();
+    }
 
     // There are two modes of iteration:  Stepping forward to cells and cell
     // ancestors, and stepping through the contents of a cover cell or ancestor cell.
