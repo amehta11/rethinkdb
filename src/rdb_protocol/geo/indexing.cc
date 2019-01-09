@@ -493,9 +493,8 @@ continue_bool_t geo_traversal(
     // duh
     rocksdb::OptimisticTransactionDB *db = rocksh.rocks->db();
 
+    // TODO: Use
     // linux_thread_pool_t::run_in_blocker_pool([&]() {
-    // TODO: Release the superblock after we get a snapshot or something.
-    // (Does making an iterator get us a snapshot?)
 
     // We'll overwrite prefixed_pos as we iterate.
     // TODO: Do we use prefixed_left_bound?
@@ -564,7 +563,7 @@ continue_bool_t geo_traversal(
                 break;
             } else if (cellid.contains(cell)) {
                 // Iterate through all keys with the entire ancestor's _value_.
-                max_cell = cell;
+                max_cell = cellid;
                 found_cell = true;
                 break;
             } else {
