@@ -453,6 +453,8 @@ bool geo_index_traversal_helper_t::skip_forward_to_seek_key(std::string *pos) co
         return false;
     }
 
+    bool has_candidate = false;
+    geo::S2CellId candidate_pos;
     {
         auto it = std::lower_bound(query_cells_.begin(), query_cells_.end(), pos_cell);
         // The return pos might intersect *it or *(it-1).
@@ -461,9 +463,16 @@ bool geo_index_traversal_helper_t::skip_forward_to_seek_key(std::string *pos) co
             // Don't advance pos, it's already in a range.
             return true;
         }
-        if (it != query_cells_.end() && pos_cell.intersects(*it)) {
-            // Don't advance pos, it's already in a range.
-            return true;
+        if (it != query_cells_.end()) {
+            if (pos_cell.intersects(*it)) {
+                // Don't advance pos, it's already in a range.
+                return true;
+            }
+            // First candidate is the beginning of a query cell (which we know
+            // pos_cell is before, because it's before the midpoint and doesn't
+            // intersect).
+            candidate_pos = it->range_min();
+            has_candidate = true;
         }
     }
 
@@ -471,13 +480,19 @@ bool geo_index_traversal_helper_t::skip_forward_to_seek_key(std::string *pos) co
         query_cell_ancestors_.begin(),
         query_cell_ancestors_.end(),
         pos_cell);
-    if (it == query_cell_ancestors_.end()) {
-        return false;
+    if (it != query_cell_ancestors_.end()) {
+        if (has_candidate) {
+            candidate_pos = std::min<geo::S2CellId>(*it, candidate_pos);
+        } else {
+            has_candidate = true;
+            candidate_pos = *it;
+        }
     }
-
-    geo::S2CellId out_pos = *it;
-    *pos = s2cellid_to_key(out_pos);
-    return true;
+    if (has_candidate) {
+        *pos = s2cellid_to_key(candidate_pos);
+        return true;
+    }
+    return false;
 }
 
 
