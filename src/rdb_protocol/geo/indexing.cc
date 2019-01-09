@@ -338,7 +338,8 @@ void geo_index_traversal_helper_t::init_query(
     guarantee(!is_initialized_);
     rassert(query_cells_.empty());
     query_cells_ = query_cell_covering;
-    query_cell_ancestors_ = compute_ancestors(query_cell_covering);
+    std::sort(query_cells_.begin(), query_cells_.end());
+    query_cell_ancestors_ = compute_ancestors(query_cells_);
     query_interior_cells_ = query_interior_cell_covering;
     is_initialized_ = true;
 }
@@ -443,13 +444,10 @@ bool geo_index_traversal_helper_t::any_cell_contains(
 // pos lies within the range of a query cell range or ancestor cell value.
 // Whatever is smallest and >=*pos, among all such values.
 bool geo_index_traversal_helper_t::skip_forward_to_seek_key(std::string *pos) const {
-    // TODO: Performance, store the query cells in increasing order.
-    std::vector<geo::S2CellId> qcells = query_cells_;
-    rassert(!qcells.empty());
-    if (qcells.empty()) {  // TODO: Verify if this is impossible.
+    rassert(!query_cells_.empty());
+    if (query_cells_.empty()) {  // TODO: Verify if this is impossible.
         return false;
     }
-    std::sort(qcells.begin(), qcells.end());
 
     // TODO: We parse this twice, I'm pretty sure.
     store_key_t skey(*pos);
@@ -468,14 +466,14 @@ bool geo_index_traversal_helper_t::skip_forward_to_seek_key(std::string *pos) co
     }
 
     {
-        auto it = std::lower_bound(qcells.begin(), qcells.end(), pos_cell);
+        auto it = std::lower_bound(query_cells_.begin(), query_cells_.end(), pos_cell);
         // The return pos might intersect *it or *(it-1).
 
-        if (it != qcells.begin() && pos_cell.intersects(*(it - 1))) {
+        if (it != query_cells_.begin() && pos_cell.intersects(*(it - 1))) {
             // Don't advance pos, it's already in a range.
             return true;
         }
-        if (it != qcells.end() && pos_cell.intersects(*it)) {
+        if (it != query_cells_.end() && pos_cell.intersects(*it)) {
             // Don't advance pos, it's already in a range.
             return true;
         }

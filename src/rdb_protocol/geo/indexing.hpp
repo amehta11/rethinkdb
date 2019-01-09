@@ -92,6 +92,7 @@ private:
     static bool any_cell_contains(const std::vector<geo::S2CellId> &cells,
                                   const geo::S2CellId key);
 
+    // Sorted.
     std::vector<geo::S2CellId> query_cells_;
     // Sorted and deduped.
     std::vector<geo::S2CellId> query_cell_ancestors_;
