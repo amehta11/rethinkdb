@@ -24,15 +24,7 @@ void test_mangle(const std::string &pkey, const std::string &skey, optional<uint
         std::string mangled = ql::datum_t::mangle_secondary(
             skey_version, skey, pkey, tag_string);
         ASSERT_EQ(pkey, ql::datum_t::extract_primary(mangled));
-        std::string skey2 = skey;
-        guarantee(!(skey2[0] & 0x80)); // None of our types have the top bit set.
-        switch (skey_version) {
-        case ql::skey_version_t::post_1_16:
-            skey2[0] |= 0x80; // Flip the top bit to indicate 1.16+ skey_version.
-            break;
-        default: unreachable();
-        }
-        ASSERT_EQ(skey2, ql::datum_t::extract_secondary(mangled));
+        ASSERT_EQ(skey, ql::datum_t::extract_secondary(mangled));
         optional<uint64_t> extracted_tag = ql::datum_t::extract_tag(mangled);
         ASSERT_EQ(static_cast<bool>(tag), extracted_tag.has_value());
         if (tag) {

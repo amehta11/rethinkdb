@@ -143,10 +143,7 @@ std::string s2cellid_to_key(S2CellId id) {
 
 S2CellId key_to_s2cellid(const std::string &sid) {
     guarantee(sid.length() >= 2
-              // We need the static cast here because `'G' | 0x80` does integer
-              // promotion and produces 199, whereas `sid[0]` produces -57
-              // because it's a signed char.  C FTW!
-              && (sid[0] == 'G' || static_cast<uint8_t>(sid[0]) == ('G' | 0x80))
+              && sid[0] == 'G'
               && sid[1] == 'C');
     return S2CellId::FromToken(sid.substr(2));
 }
@@ -182,14 +179,8 @@ std::pair<S2CellId, bool> order_btree_key_relative_to_s2cellid_keys(
     static const std::pair<S2CellId, bool> after_all(
         S2CellId::Sentinel(), false);
 
-    /* A well-formed sindex key will start with the characters 'GC'. But if the sindex
-    version is 1.16 or higher, the high bit on the 'G' will be set. */
-    uint8_t first_char;
-    switch (skey_version) {
-        case ql::skey_version_t::post_1_16:
-            first_char = static_cast<uint8_t>('G') | 0x80; break;
-        default: unreachable();
-    }
+    /* A well-formed sindex key will start with the characters 'GC'. */
+    uint8_t first_char = 'G';
     if (key_or_null == nullptr || key_or_null->size == 0) return before_all;
     if (key_or_null->contents[0] < first_char) return before_all;
     if (key_or_null->contents[0] > first_char) return after_all;
@@ -454,16 +445,10 @@ bool geo_index_traversal_helper_t::skip_forward_to_seek_key(std::string *pos) co
 
     // TODO: Fragile code.
     geo::S2CellId pos_cell;
-    if (!pos->empty()) {
-        // TODO: Hack
-        (*pos)[0] = (*pos)[0] & ~(0x80);
-    }
     if (*pos < "GC") {
         // The minimal cell id.
         pos_cell = geo::S2CellId(1);
     } else if (*pos < "GD") {
-        // TODO: This is a total TOTAL hack.  There is presumably some function to use.
-        // TODO: Figure out how sindex ranges are generated for e.g. between queries, and where they get the 0x80.
         pos_cell = btree_key_to_s2cellid(skey.btree_key());
     } else {
         return false;
@@ -475,12 +460,10 @@ bool geo_index_traversal_helper_t::skip_forward_to_seek_key(std::string *pos) co
 
         if (it != query_cells_.begin() && pos_cell.intersects(*(it - 1))) {
             // Don't advance pos, it's already in a range.
-            if (!pos->empty()) { (*pos)[0] = (*pos)[0] | 0x80; } // TODO hack
             return true;
         }
         if (it != query_cells_.end() && pos_cell.intersects(*it)) {
             // Don't advance pos, it's already in a range.
-            if (!pos->empty()) { (*pos)[0] = (*pos)[0] | 0x80; } // TODO hack
             return true;
         }
     }
@@ -495,7 +478,6 @@ bool geo_index_traversal_helper_t::skip_forward_to_seek_key(std::string *pos) co
 
     geo::S2CellId out_pos = *it;
     *pos = s2cellid_to_key(out_pos);
-    if (!pos->empty()) { (*pos)[0] = (*pos)[0] | 0x80; } // TODO hack
     return true;
 }
 

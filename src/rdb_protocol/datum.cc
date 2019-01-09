@@ -1079,21 +1079,6 @@ std::string datum_t::print_primary() const {
     return s;
 }
 
-// Returns `true` if it tagged the skey version.
-// Since we've removed support for pre 1.16 indexes, this function now always returns
-// `true`.
-bool tag_skey_version(skey_version_t skey_version, std::string *s) {
-    guarantee(s->size() > 0);
-    guarantee(!((*s)[0] & 0x80)); // None of our types have the top bit set
-    switch (skey_version) {
-    case skey_version_t::post_1_16:
-        (*s)[0] |= 0x80; // Flip the top bit to indicate 1.16+ skey_version.
-        return true;
-    default: unreachable();
-    }
-    unreachable();
-}
-
 std::string datum_t::mangle_secondary(
     skey_version_t skey_version,
     const std::string &secondary,
@@ -1107,9 +1092,7 @@ std::string datum_t::mangle_secondary(
     // it was truncated (in which case it's fixed-width and doesn't need a
     // terminator).
     std::string res = secondary + primary;
-    if (tag_skey_version(skey_version, &res)) {
-        res += std::string(1, 0);
-    }
+    res += std::string(1, 0);
     uint8_t tag_offset = res.size();
     guarantee(res.size() <= MAX_KEY_SIZE);
     res += tag + std::string(1, pk_offset) + std::string(1, tag_offset);
@@ -1232,14 +1215,8 @@ components_t parse_secondary(const std::string &key) THROWS_NOTHING {
     // `rget_cb_t::handle_pair()`.
     skey_version_t skey_version = skey_version_t::post_1_16;
     std::string secondary = key.substr(0, start_of_primary);
-    if (secondary[0] & 0x80) {
-        skey_version = skey_version_t::post_1_16;
-        // To account for extra NULL byte in 1.16+.
-        end_of_primary -= 1;
-    } else {
-        // pre 1.16 versions are no longer supported
-        unreachable();
-    }
+    // To account for extra NULL byte in 1.16+.
+    end_of_primary -= 1;
     guarantee(start_of_primary < end_of_primary);
     std::string primary =
         key.substr(start_of_primary, end_of_primary - start_of_primary);
@@ -1348,7 +1325,6 @@ store_key_t datum_t::truncated_secondary(
         s.erase(mts);
     }
 
-    tag_skey_version(skey_version, &s);
     return store_key_t(s);
 }
 
