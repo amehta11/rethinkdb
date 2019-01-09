@@ -550,14 +550,24 @@ continue_bool_t geo_traversal(
             return continue_bool_t::CONTINUE;
         }
         std::string prefixed_pos = rocks_kv_prefix + pos;
-        iter->Seek(prefixed_pos);  // TODO: blocker pool
-        if (!iter->Valid()) {
+        bool was_valid;
+        rocksdb::Slice key_slice;
+        rocksdb::Slice value_slice;
+        linux_thread_pool_t::run_in_blocker_pool([&]() {
+            iter->Seek(prefixed_pos);  // TODO: blocker pool
+            was_valid = iter->Valid();
+            if (was_valid) {
+                key_slice = iter->key();
+                // TODO: Is there advantage in delaying this?
+                value_slice = iter->value();
+            }
+        });
+        if (!was_valid) {
             return continue_bool_t::CONTINUE;
         }
+        key_slice.remove_prefix(rocks_kv_prefix.size());
 
-        rocksdb::Slice key = iter->key();
-        key.remove_prefix(rocks_kv_prefix.size());
-        store_key_t skey(key.size(), reinterpret_cast<const uint8_t *>(key.data()));
+        store_key_t skey(key_slice.size(), reinterpret_cast<const uint8_t *>(key_slice.data()));
         S2CellId cellid = btree_key_to_s2cellid(skey.btree_key());
 
         bool found_cell = false;
@@ -581,49 +591,52 @@ continue_bool_t geo_traversal(
         }
 
         if (!found_cell) {
-            pos = key.ToString();
+            pos = key_slice.ToString();
             continue;
         }
 
         std::string stop_line
             = rocks_kv_prefix + rockstore::prefix_end(s2cellid_to_key(max_cell));
 
-        rocksdb::Slice key_slice = iter->key();
-        rocksdb::Slice value_slice = iter->value();
-        bool was_valid = true;
         for (;;) {
-            rocksdb::Slice prefixless_key = key_slice;
-            prefixless_key.remove_prefix(rocks_kv_prefix.size());
+            // key_slice at this point has had the prefix truncated.
             continue_bool_t contbool = helper->handle_pair(
-                std::make_pair(prefixless_key.data(), prefixless_key.size()),
+                std::make_pair(key_slice.data(), key_slice.size()),
                 std::make_pair(value_slice.data(), value_slice.size()));
             if (contbool == continue_bool_t::ABORT) {
                 return continue_bool_t::ABORT;
             }
 
-            iter->Next();
-            was_valid = iter->Valid();
+            linux_thread_pool_t::run_in_blocker_pool([&]() {
+                iter->Next();
+                was_valid = iter->Valid();
+                if (was_valid) {
+                    key_slice = iter->key();
+                    // TODO: Useful to be lazy about?
+                    value_slice = iter->value();
+                }
+
+            });
             if (!was_valid) {
                 break;
             }
-            key_slice = iter->key();
             if (key_slice.ToString() >= stop_line) {  // TODO: Perf.
+                key_slice.remove_prefix(rocks_kv_prefix.size());
                 break;
             }
 
-            value_slice = iter->value();
+            key_slice.remove_prefix(rocks_kv_prefix.size());
         }
 
         // At this point, maybe we've iterated through an entire cell's range or
         // value, maybe not.  The iterator is now pointing at the key _past_
         // that cell (or is not valid).  We continue through the loop if it's
         // valid.
-        if (!iter->Valid()) {
+        if (!was_valid) {
             return continue_bool_t::CONTINUE;
         }
-        key = iter->key();
-        key.remove_prefix(rocks_kv_prefix.size());
-        pos = key.ToString();
+        // At this point key_slice has had the prefix truncated.
+        pos = key_slice.ToString();
     }
 
 }
