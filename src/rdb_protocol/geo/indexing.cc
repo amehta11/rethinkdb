@@ -523,7 +523,6 @@ continue_bool_t geo_traversal(
     } else {
         prefixed_upper_bound = rockstore::prefix_end(rocks_kv_prefix);
     }
-    printf("prefixed_upper_bound = '%s'\n", prefixed_upper_bound.c_str());
 
     if (!prefixed_upper_bound.empty()) {
         // Note: prefixed_upper_bound_slice doesn't copy the string, it points into it.
@@ -547,22 +546,16 @@ continue_bool_t geo_traversal(
     for (;;) {
         // At this point, we want to advance the iterator forward to the first
         // cell key intersecting the cover, greater than or equal to prefixed_left_bound.
-        printf("Advancing forward to '%s'\n", pos.c_str());
-
         if (!helper->skip_forward_to_seek_key(&pos)) {
-            printf("did not skip forward\n");
             return continue_bool_t::CONTINUE;
         }
         std::string prefixed_pos = rocks_kv_prefix + pos;
-        printf("Hit seek key '%s'\n", prefixed_pos.c_str());
         iter->Seek(prefixed_pos);  // TODO: blocker pool
         if (!iter->Valid()) {
-            printf("iter not valid\n");
             return continue_bool_t::CONTINUE;
         }
 
         rocksdb::Slice key = iter->key();
-        printf("On key '%s'\n", key.ToString().c_str());
         key.remove_prefix(rocks_kv_prefix.size());
         store_key_t skey(key.size(), reinterpret_cast<const uint8_t *>(key.data()));
         S2CellId cellid = btree_key_to_s2cellid(skey.btree_key());
@@ -588,14 +581,12 @@ continue_bool_t geo_traversal(
         }
 
         if (!found_cell) {
-            printf("no cell found for key '%s'\n", key.ToString().c_str());
             pos = key.ToString();
             continue;
         }
 
         std::string stop_line
             = rocks_kv_prefix + rockstore::prefix_end(s2cellid_to_key(max_cell));
-        printf("Iterating to stop line '%s'\n", stop_line.c_str());
 
         rocksdb::Slice key_slice = iter->key();
         rocksdb::Slice value_slice = iter->value();
@@ -603,12 +594,10 @@ continue_bool_t geo_traversal(
         for (;;) {
             rocksdb::Slice prefixless_key = key_slice;
             prefixless_key.remove_prefix(rocks_kv_prefix.size());
-            printf("handling pair '%s'\n", prefixless_key.ToString().c_str());
             continue_bool_t contbool = helper->handle_pair(
                 std::make_pair(prefixless_key.data(), prefixless_key.size()),
                 std::make_pair(value_slice.data(), value_slice.size()));
             if (contbool == continue_bool_t::ABORT) {
-                printf("told to abort\n");
                 return continue_bool_t::ABORT;
             }
 
@@ -630,7 +619,6 @@ continue_bool_t geo_traversal(
         // that cell (or is not valid).  We continue through the loop if it's
         // valid.
         if (!iter->Valid()) {
-            printf("iter not valid after cell, exiting\n");
             return continue_bool_t::CONTINUE;
         }
         key = iter->key();
