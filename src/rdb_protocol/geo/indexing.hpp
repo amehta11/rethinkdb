@@ -11,7 +11,6 @@
 
 namespace ql {
 class datum_t;
-enum class skey_version_t;
 }
 class rockshard;
 class signal_t;
@@ -41,8 +40,7 @@ std::vector<geo::S2CellId> compute_interior_cell_covering(
 // TODO (daniel): Support compound indexes somehow.
 class geo_index_traversal_helper_t {
 public:
-    geo_index_traversal_helper_t(
-        ql::skey_version_t skey_version, const signal_t *interruptor);
+    geo_index_traversal_helper_t(const signal_t *interruptor);
 
     void init_query(
         const std::vector<geo::S2CellId> &query_cell_covering,
@@ -98,7 +96,6 @@ private:
     std::vector<geo::S2CellId> query_cell_ancestors_;
     std::vector<geo::S2CellId> query_interior_cells_;
     bool is_initialized_;
-    const ql::skey_version_t skey_version_;
     const signal_t *interruptor_;
 };
 

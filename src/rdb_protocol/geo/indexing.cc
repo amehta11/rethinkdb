@@ -172,8 +172,7 @@ relative to geospatial sindex keys. There are four possible outcomes:
   - `key_or_null` lies before all possible sindex keys for `S2CellId`s. It will return
     `(S2CellId::FromFacePosLevel(0, 0, geo::S2::kMaxCellLevel), false)`. */
 std::pair<S2CellId, bool> order_btree_key_relative_to_s2cellid_keys(
-        const btree_key_t *key_or_null,
-        ql::skey_version_t skey_version) {
+        const btree_key_t *key_or_null) {
     static const std::pair<S2CellId, bool> before_all(
         S2CellId::FromFacePosLevel(0, 0, geo::S2::kMaxCellLevel), false);
     static const std::pair<S2CellId, bool> after_all(
@@ -305,8 +304,8 @@ std::vector<S2CellId> compute_interior_cell_covering(
 }
 
 geo_index_traversal_helper_t::geo_index_traversal_helper_t(
-        ql::skey_version_t skey_version, const signal_t *interruptor)
-    : is_initialized_(false), skey_version_(skey_version), interruptor_(interruptor) { }
+        const signal_t *interruptor)
+    : is_initialized_(false), interruptor_(interruptor) { }
 
 // Computes the query cells' ancestors, deduped and in sorted order.
 std::vector<geo::S2CellId> compute_ancestors(const std::vector<geo::S2CellId> &query_cells) {
@@ -360,9 +359,9 @@ geo_index_traversal_helper_t::handle_pair(
 bool geo_index_traversal_helper_t::any_query_cell_intersects(
         const btree_key_t *left_excl_or_null, const btree_key_t *right_incl) const {
     std::pair<S2CellId, bool> left =
-        order_btree_key_relative_to_s2cellid_keys(left_excl_or_null, skey_version_);
+        order_btree_key_relative_to_s2cellid_keys(left_excl_or_null);
     std::pair<S2CellId, bool> right =
-        order_btree_key_relative_to_s2cellid_keys(right_incl, skey_version_);
+        order_btree_key_relative_to_s2cellid_keys(right_incl);
 
     /* This is more conservative than necessary. For example, if `left_excl_or_null` is
     after the largest possible cell or `right_incl` is before the smallest possible cell,

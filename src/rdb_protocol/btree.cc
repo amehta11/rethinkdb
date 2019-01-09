@@ -1911,7 +1911,6 @@ void rdb_modification_report_cb_t::on_mod_report_sub(
 }
 
 std::vector<std::string> expand_geo_key(
-        reql_version_t reql_version,
         const ql::datum_t &key,
         const store_key_t &primary_key,
         optional<uint64_t> tag_num) {
@@ -1937,7 +1936,6 @@ std::vector<std::string> expand_geo_key(
 
             result.push_back(
                 ql::datum_t::compose_secondary(
-                    ql::skey_version_from_reql_version(reql_version),
                     grid_keys[i], primary_key, tag_num));
         }
 
@@ -1978,8 +1976,7 @@ void compute_keys(const store_key_t &primary_key,
         for (uint64_t i = 0; i < index.arr_size(); ++i) {
             const ql::datum_t &skey = index.get(i, ql::THROW);
             if (index_info.geo == sindex_geo_bool_t::GEO) {
-                std::vector<std::string> geo_keys = expand_geo_key(reql_version,
-                                                                   skey,
+                std::vector<std::string> geo_keys = expand_geo_key(skey,
                                                                    primary_key,
                                                                    make_optional(i));
                 for (auto it = geo_keys.begin(); it != geo_keys.end(); ++it) {
@@ -2017,8 +2014,7 @@ void compute_keys(const store_key_t &primary_key,
         }
     } else {
         if (index_info.geo == sindex_geo_bool_t::GEO) {
-            std::vector<std::string> geo_keys = expand_geo_key(reql_version,
-                                                               index,
+            std::vector<std::string> geo_keys = expand_geo_key(index,
                                                                primary_key,
                                                                r_nullopt);
             for (auto it = geo_keys.begin(); it != geo_keys.end(); ++it) {
