@@ -580,6 +580,7 @@ continue_bool_t geo_traversal(
 
         std::string stop_line
             = rocks_kv_prefix + rockstore::prefix_end(s2cellid_to_key(max_cell));
+        printf("Iterating to stop line '%s'\n", stop_line.c_str());
 
         rocksdb::Slice key_slice = iter->key();
         rocksdb::Slice value_slice = iter->value();
