@@ -454,6 +454,10 @@ bool geo_index_traversal_helper_t::skip_forward_to_seek_key(std::string *pos) co
 
     // TODO: Fragile code.
     geo::S2CellId pos_cell;
+    if (!pos->empty()) {
+        // TODO: Hack
+        (*pos)[0] = (*pos)[0] & ~(0x80);
+    }
     if (*pos < "GC") {
         // The minimal cell id.
         pos_cell = geo::S2CellId(1);
@@ -471,10 +475,12 @@ bool geo_index_traversal_helper_t::skip_forward_to_seek_key(std::string *pos) co
 
         if (it != query_cells_.begin() && pos_cell.intersects(*(it - 1))) {
             // Don't advance pos, it's already in a range.
+            if (!pos->empty()) { (*pos)[0] = (*pos)[0] | 0x80; } // TODO hack
             return true;
         }
         if (it != query_cells_.end() && pos_cell.intersects(*it)) {
             // Don't advance pos, it's already in a range.
+            if (!pos->empty()) { (*pos)[0] = (*pos)[0] | 0x80; } // TODO hack
             return true;
         }
     }
@@ -489,6 +495,7 @@ bool geo_index_traversal_helper_t::skip_forward_to_seek_key(std::string *pos) co
 
     geo::S2CellId out_pos = *it;
     *pos = s2cellid_to_key(out_pos);
+    if (!pos->empty()) { (*pos)[0] = (*pos)[0] | 0x80; } // TODO hack
     return true;
 }
 
@@ -521,6 +528,7 @@ continue_bool_t geo_traversal(
     } else {
         prefixed_upper_bound = rockstore::prefix_end(rocks_kv_prefix);
     }
+    printf("prefixed_upper_bound = '%s'\n", prefixed_upper_bound.c_str());
 
     if (!prefixed_upper_bound.empty()) {
         // Note: prefixed_upper_bound_slice doesn't copy the string, it points into it.
@@ -544,20 +552,23 @@ continue_bool_t geo_traversal(
     for (;;) {
         // At this point, we want to advance the iterator forward to the first
         // cell key intersecting the cover, greater than or equal to prefixed_left_bound.
-
+        printf("Advancing forward to '%s'\n", pos.c_str());
 
         if (!helper->skip_forward_to_seek_key(&pos)) {
+            printf("did not skip forward\n");
             return continue_bool_t::CONTINUE;
         }
         std::string prefixed_pos = rocks_kv_prefix + pos;
+        printf("Hit seek key '%s'\n", prefixed_pos.c_str());
         iter->Seek(prefixed_pos);  // TODO: blocker pool
         if (!iter->Valid()) {
+            printf("iter not valid\n");
             return continue_bool_t::CONTINUE;
         }
 
         rocksdb::Slice key = iter->key();
+        printf("On key '%s'\n", key.ToString().c_str());
         key.remove_prefix(rocks_kv_prefix.size());
-
         store_key_t skey(key.size(), reinterpret_cast<const uint8_t *>(key.data()));
         S2CellId cellid = btree_key_to_s2cellid(skey.btree_key());
 
@@ -582,6 +593,7 @@ continue_bool_t geo_traversal(
         }
 
         if (!found_cell) {
+            printf("no cell found for key '%s'\n", key.ToString().c_str());
             pos = key.ToString();
             continue;
         }
@@ -595,23 +607,26 @@ continue_bool_t geo_traversal(
         for (;;) {
             rocksdb::Slice prefixless_key = key_slice;
             prefixless_key.remove_prefix(rocks_kv_prefix.size());
+            printf("handling pair '%s'\n", prefixless_key.ToString().c_str());
             continue_bool_t contbool = helper->handle_pair(
                 std::make_pair(prefixless_key.data(), prefixless_key.size()),
                 std::make_pair(value_slice.data(), value_slice.size()));
             if (contbool == continue_bool_t::ABORT) {
+                printf("told to abort\n");
                 return continue_bool_t::ABORT;
             }
 
             iter->Next();
             was_valid = iter->Valid();
-            if (was_valid) {
-                key_slice = iter->key();
-                if (key_slice.ToString() >= stop_line) {  // TODO: Perf.
-                    break;
-                }
-
-                value_slice = iter->value();
+            if (!was_valid) {
+                break;
             }
+            key_slice = iter->key();
+            if (key_slice.ToString() >= stop_line) {  // TODO: Perf.
+                break;
+            }
+
+            value_slice = iter->value();
         }
 
         // At this point, maybe we've iterated through an entire cell's range or
@@ -619,6 +634,7 @@ continue_bool_t geo_traversal(
         // that cell (or is not valid).  We continue through the loop if it's
         // valid.
         if (!iter->Valid()) {
+            printf("iter not valid after cell, exiting\n");
             return continue_bool_t::CONTINUE;
         }
         key = iter->key();
