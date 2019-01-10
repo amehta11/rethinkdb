@@ -71,7 +71,7 @@ continue_bool_t btree_send_backfill_pre(
                 const btree_key_t *right_incl,
                 repli_timestamp_t timestamp,
                 signal_t *,
-                bool *skip_out) {
+                bool *skip_out) override {
             *skip_out = timestamp <= reference_timestamp;
             if (*skip_out) {
                 return pre_item_consumer->on_empty_range(
@@ -86,7 +86,7 @@ continue_bool_t btree_send_backfill_pre(
                 const btree_key_t *left_excl_or_null,
                 const btree_key_t *right_incl,
                 signal_t *,
-                bool *skip_out) {
+                bool *skip_out) override {
             *skip_out = true;
             const leaf_node_t *lnode = static_cast<const leaf_node_t *>(
                 buf->read->get_data_read());
@@ -141,14 +141,14 @@ continue_bool_t btree_send_backfill_pre(
             }
         }
 
-        continue_bool_t handle_pair(scoped_key_value_t &&, signal_t *) {
+        continue_bool_t handle_pair(scoped_key_value_t &&, signal_t *) override {
             unreachable();
         }
 
         continue_bool_t handle_empty(
                 UNUSED const btree_key_t *left_excl_or_null,
                 const btree_key_t *right_incl,
-                signal_t *) {
+                signal_t *) override {
             return pre_item_consumer->on_empty_range(
                     convert_to_right_bound(right_incl));
         }
@@ -318,7 +318,7 @@ private:
             const btree_key_t *right_incl,
             repli_timestamp_t timestamp,
             signal_t *interruptor,
-            bool *skip_out) {
+            bool *skip_out) override {
         *skip_out = false;
         if (timestamp <= reference_timestamp) {
             key_range_t range = convert_to_key_range(left_excl_or_null, right_incl);
@@ -336,7 +336,7 @@ private:
             const btree_key_t *left_excl_or_null,
             const btree_key_t *right_incl,
             signal_t *interruptor,
-            bool *skip_out) {
+            bool *skip_out) override {
         *skip_out = true;
         key_range_t::right_bound_t cursor = convert_to_right_bound(left_excl_or_null);
         key_range_t::right_bound_t right_bound = convert_to_right_bound(right_incl);
@@ -627,14 +627,14 @@ private:
         return continue_bool_t::CONTINUE;
     }
 
-    continue_bool_t handle_pair(scoped_key_value_t &&, signal_t *) {
+    continue_bool_t handle_pair(scoped_key_value_t &&, signal_t *) override {
         unreachable();
     }
 
     continue_bool_t handle_empty(
             const btree_key_t *left_excl_or_null,
             const btree_key_t *right_incl,
-            signal_t *interruptor) {
+            signal_t *interruptor) override {
         key_range_t::right_bound_t cursor = convert_to_right_bound(left_excl_or_null);
         key_range_t::right_bound_t end = convert_to_right_bound(right_incl);
         while (cursor != end) {
@@ -705,7 +705,7 @@ public:
             UNUSED const btree_key_t *left_excl_or_null,
             UNUSED const btree_key_t *right_incl,
             signal_t *,
-            bool *skip_out) {
+            bool *skip_out) override {
         *skip_out = true;
         buf_write_t buf_write(&buf->lock);
         leaf_node_t *lnode = static_cast<leaf_node_t *>(buf_write.get_data_write());
@@ -719,12 +719,12 @@ public:
             const counted_t<counted_buf_lock_and_read_t> &buf,
             UNUSED const btree_key_t *left_excl_or_null,
             UNUSED const btree_key_t *right_incl,
-            signal_t *) {
+            signal_t *) override {
         buf->lock.set_recency(superceding_recency(
             min_deletion_timestamp, buf->lock.get_recency()));
         return continue_bool_t::CONTINUE;
     }
-    continue_bool_t handle_pair(scoped_key_value_t &&, signal_t *) {
+    continue_bool_t handle_pair(scoped_key_value_t &&, signal_t *) override {
         unreachable();
     }
 private:
