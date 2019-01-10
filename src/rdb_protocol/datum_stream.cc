@@ -3,6 +3,7 @@
 
 #include <map>
 
+#include "math.hpp"
 #include "rdb_protocol/batching.hpp"
 #include "rdb_protocol/datum_stream/array.hpp"
 #include "rdb_protocol/datum_stream/eq_join.hpp"
