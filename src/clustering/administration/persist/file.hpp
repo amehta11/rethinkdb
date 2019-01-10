@@ -50,9 +50,9 @@ public:
         read_txn_t(metadata_file_t *file, signal_t *interruptor);
 
         template<class T, cluster_version_t W = cluster_version_t::LATEST_DISK>
-        T read(const key_t<T> &key, signal_t *interruptor) {
+        T read(const key_t<T> &key) {
             T value;
-            bool found = read_maybe<T, W>(key, &value, interruptor);
+            bool found = read_maybe<T, W>(key, &value);
             guarantee(found, "failed to find expected metadata key");
             return value;
         }
@@ -60,10 +60,7 @@ public:
         template<class T, cluster_version_t W = cluster_version_t::LATEST_DISK>
         bool read_maybe(
                 const key_t<T> &key,
-                T *value_out,
-                signal_t *interruptor) {
-            // TODO: Remove interruptor param?
-            (void)interruptor;
+                T *value_out) {
             std::pair<std::string, bool> value = read_bin(key.key);
             if (!value.second) {
                 return false;
@@ -151,15 +148,13 @@ public:
     // Used to open an existing metadata file
     metadata_file_t(
         io_backender_t *io_backender,
-        perfmon_collection_t *perfmon_parent,
-        signal_t *interruptor);
+        perfmon_collection_t *perfmon_parent);
 
     // Used top create a new metadata file
     metadata_file_t(
         io_backender_t *io_backender,
         perfmon_collection_t *perfmon_parent,
-        const std::function<void(write_txn_t *, signal_t *)> &initializer,
-        signal_t *interruptor);
+        const std::function<void(write_txn_t *, signal_t *)> &initializer);
     ~metadata_file_t();
 
 private:
