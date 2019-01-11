@@ -733,8 +733,6 @@ continue_bool_t send_all_in_keyrange(
     (void)reference_timestamp;  // TODO: Use this?
     rocksdb::OptimisticTransactionDB *db = rocksh.rocks->db();
 
-    printf("Backfilling on range %s\n", strprint_range(range).c_str());
-
     std::string rocks_kv_prefix = rockstore::table_primary_prefix(rocksh.table_id, rocksh.shard_no);
 
     std::string left = rocks_kv_prefix + key_to_unescaped_str(range.left);
@@ -784,8 +782,6 @@ continue_bool_t send_all_in_keyrange(
         }
 
         key_slice.remove_prefix(rocks_kv_prefix.size());
-        printf("Chopped key '%s'\n",
-            dbgstr(key_slice.ToString()).c_str());
 
         // TODO: Batch backfill items.  (It seems nice.)
 
@@ -820,13 +816,10 @@ continue_bool_t send_all_in_keyrange(
 
     iter.reset();  // Might as well destroy asap.
 
-    printf("making backfill key with key %s\n", key_to_debug_str(prev_key).c_str());
-
     backfill_item_t item;
     item.range = key_range_t(prev_bound, prev_key.btree_key(), key_range_t::bound_t::none, nullptr);
     item.range.right = range.right;
     item.min_deletion_timestamp = max_timestamp;  // TODO: A gross hack, but we can't do better for now.
-    printf("item range: %s\n", strprint_range(item.range).c_str());
 
     if (item.range.is_empty()) {
         return continue_bool_t::CONTINUE;
