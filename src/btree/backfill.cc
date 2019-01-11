@@ -63,6 +63,9 @@ continue_bool_t btree_send_backfill_pre(
         repli_timestamp_t reference_timestamp,
         btree_backfill_pre_item_consumer_t *pre_item_consumer,
         signal_t *interruptor) {
+    (void)sizer;  // TODO remove param
+    (void)reference_timestamp;  // TODO!?
+    (void)interruptor;  // TODO remove param
     backfill_debug_range(range, strprintf(
         "btree_send_backfill_pre %" PRIu64, reference_timestamp.longtime));
 
@@ -684,7 +687,7 @@ private:
 };
 
 continue_bool_t btree_send_backfill(
-        superblock_t *superblock,
+        real_superblock_t *superblock,
         release_superblock_t release_superblock,
         value_sizer_t *sizer,
         const key_range_t &range,
@@ -747,7 +750,7 @@ private:
 };
 
 void btree_receive_backfill_item_update_deletion_timestamps(
-        superblock_t *superblock,
+        real_superblock_t *superblock,
         release_superblock_t release_superblock,
         value_sizer_t *sizer,
         const backfill_item_t &item,

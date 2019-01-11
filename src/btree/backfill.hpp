@@ -218,7 +218,7 @@ protected:
 };
 
 continue_bool_t btree_send_backfill(
-    superblock_t *superblock,
+    real_superblock_t *superblock,
     release_superblock_t release_superblock,
     value_sizer_t *sizer,
     const key_range_t &range,
@@ -242,7 +242,7 @@ entries with timestamps earlier than `item.min_deletion_timestamp`. It should be
 for every `backfill_item_t` that's applied to the B-tree, unless `item.is_single_key()`
 returns `true`. */
 void btree_receive_backfill_item_update_deletion_timestamps(
-    superblock_t *superblock,
+    real_superblock_t *superblock,
     release_superblock_t release_superblock,
     value_sizer_t *sizer,
     const backfill_item_t &item,
