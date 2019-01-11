@@ -696,6 +696,31 @@ private:
     backfill_item_memory_tracker_t *memory_tracker;
 };
 
+// TODO: Remove
+std::string strprint_range(const key_range_t &range) {
+    return strprintf("'%s' - '%s'",
+key_to_debug_str(range.left).c_str(),
+        range.right.unbounded ? "(infinite)" : key_to_debug_str(range.right.key()).c_str());
+}
+
+std::string dbgstr(const std::string &key) {
+    std::string s;
+    s.push_back('"');
+    for (size_t i = 0; i < key.size(); i++) {
+        uint8_t c = key[i];
+        if ((c >= 'a' && c <= 'z') || (c >= 'A' && c <= 'Z') || (c >= '0' && c <= '9') || c == '_') {
+            s.push_back(c);
+        } else {
+            s.push_back('\\');
+            s.push_back('x');
+            s.push_back(int_to_hex((c & 0xf0) >> 4));
+            s.push_back(int_to_hex(c & 0x0f));
+        }
+    }
+    s.push_back('"');
+    return s;
+}
+
 continue_bool_t send_all_in_keyrange(
         rockshard rocksh, real_superblock_t *superblock, release_superblock_t release_superblock,
         const key_range_t &range,
@@ -707,6 +732,8 @@ continue_bool_t send_all_in_keyrange(
     (void)interruptor;  // TODO: Use interruptor.
     (void)reference_timestamp;  // TODO: Use this?
     rocksdb::OptimisticTransactionDB *db = rocksh.rocks->db();
+
+    printf("Backfilling on range %s\n", strprint_range(range).c_str());
 
     std::string rocks_kv_prefix = rockstore::table_primary_prefix(rocksh.table_id, rocksh.shard_no);
 
@@ -725,7 +752,7 @@ continue_bool_t send_all_in_keyrange(
     // TODO: With all superblock read_acq_signals... use the interruptor?
     superblock->read_acq_signal()->wait_lazily_unordered();
     repli_timestamp_t max_timestamp = superblock->get()->get_recency();
-    scoped_ptr_t<rocksdb::Iterator> iter(db->NewIterator(rocksdb::ReadOptions()));
+    scoped_ptr_t<rocksdb::Iterator> iter(db->NewIterator(opts));
     if (release_superblock == release_superblock_t::RELEASE) {
         superblock->release();
     }
@@ -743,6 +770,8 @@ continue_bool_t send_all_in_keyrange(
         }
     });
 
+    store_key_t prev_key = range.left;
+    key_range_t::bound_t prev_bound = key_range_t::bound_t::closed;
 
     // Now walk through the store.
     // TODO: What do we use memory tracker for?
@@ -755,6 +784,8 @@ continue_bool_t send_all_in_keyrange(
         }
 
         key_slice.remove_prefix(rocks_kv_prefix.size());
+        printf("Chopped key '%s'\n",
+            dbgstr(key_slice.ToString()).c_str());
 
         // TODO: Batch backfill items.  (It seems nice.)
 
@@ -766,7 +797,9 @@ continue_bool_t send_all_in_keyrange(
         pair.value1 = make_optional(std::vector<char>(value_slice.data(), value_slice.data() + value_slice.size()));
 
         backfill_item_t item;
-        item.range = key_range_t::one_key(pair.key);
+        item.range = key_range_t(prev_bound, prev_key, key_range_t::bound_t::closed, pair.key);
+        prev_key = pair.key;
+        prev_bound = key_range_t::bound_t::open;
         item.min_deletion_timestamp = max_timestamp;  // TODO: A gross hack, but we can't do better for now.
         item.pairs.push_back(std::move(pair));
 
@@ -786,7 +819,20 @@ continue_bool_t send_all_in_keyrange(
     }
 
     iter.reset();  // Might as well destroy asap.
-    return item_consumer->on_empty_range(range.right);
+
+    printf("making backfill key with key %s\n", key_to_debug_str(prev_key).c_str());
+
+    backfill_item_t item;
+    item.range = key_range_t(prev_bound, prev_key.btree_key(), key_range_t::bound_t::none, nullptr);
+    item.range.right = range.right;
+    item.min_deletion_timestamp = max_timestamp;  // TODO: A gross hack, but we can't do better for now.
+    printf("item range: %s\n", strprint_range(item.range).c_str());
+
+    if (item.range.is_empty()) {
+        return continue_bool_t::CONTINUE;
+    }
+
+    return item_consumer->on_item(std::move(item));
 }
 
 void ignore_all_pre_items(

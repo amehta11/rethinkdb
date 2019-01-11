@@ -81,6 +81,7 @@ private:
     void write(const std::string &key, const std::string &value,
             order_token_t otok, signal_t *interruptor) {
         write_t _write;
+        printf("Writing '%s' => '%s'\n", key.c_str(), value.c_str());
         if (!value.empty()) {
             ql::datum_object_builder_t doc;
             doc.overwrite("id", ql::datum_t(datum_string_t(key)));

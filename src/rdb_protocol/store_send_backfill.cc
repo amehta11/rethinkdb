@@ -158,7 +158,10 @@ public:
         rassert(remaining > 0);
         --remaining;
         rassert(key_range_t::right_bound_t(item.range.left) >=
-            *threshold_ptr);
+            *threshold_ptr,
+            "compare bound '%s' to '%s'", key_to_unescaped_str(item.range.left).c_str(),
+            threshold_ptr->unbounded ? "(unbounded)" : key_to_unescaped_str(threshold_ptr->key()).c_str()
+            );
         *threshold_ptr = item.range.right;
         inner->on_item(*metainfo_ptr, std::move(item));
         return remaining == 0
@@ -180,7 +183,7 @@ public:
             bf_value &&value_in_leaf_node,
             UNUSED signal_t *interruptor2,
             std::vector<char> *value_out) {
-        (void)parent, (void)interruptor2;
+        (void)parent;
         *value_out = std::move(value_in_leaf_node.value);
     }
     int64_t size_value(
