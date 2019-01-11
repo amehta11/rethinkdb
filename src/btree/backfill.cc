@@ -1,7 +1,10 @@
 // Copyright 2010-2014 RethinkDB, all rights reserved.
 #include "btree/backfill.hpp"
 
+#include "rocksdb/utilities/optimistic_transaction_db.h"
+
 #include "arch/runtime/coroutines.hpp"
+#include "arch/runtime/thread_pool.hpp"
 #include "btree/backfill_debug.hpp"
 #include "btree/depth_first_traversal.hpp"
 #include "btree/leaf_node.hpp"
@@ -9,13 +12,15 @@
 #include "concurrency/pmap.hpp"
 #include "containers/archive/optional.hpp"
 #include "containers/archive/stl_types.hpp"
+#include "rockstore/rockshard.hpp"
+#include "rockstore/store.hpp"
 
 /* `MAX_CONCURRENT_VALUE_LOADS` is the maximum number of coroutines we'll use for loading
 values from the leaf nodes. */
 static const int MAX_CONCURRENT_VALUE_LOADS = 16;
 
 RDB_IMPL_SERIALIZABLE_1_FOR_CLUSTER(backfill_pre_item_t, range);
-RDB_IMPL_SERIALIZABLE_3_FOR_CLUSTER(backfill_item_t::pair_t, key, recency, value);
+RDB_IMPL_SERIALIZABLE_3_FOR_CLUSTER(backfill_item_t::pair_t, key, recency, value1);
 RDB_IMPL_SERIALIZABLE_3_FOR_CLUSTER(backfill_item_t,
     range, pairs, min_deletion_timestamp);
 
@@ -249,18 +254,17 @@ private:
             fifo_enforcer_write_token_t token,
             auto_drainer_t::lock_t keepalive) {
         try {
+            // TODO: This whole pmap is unnecessary.
             pmap(item.pairs.size(), [&](size_t i) {
                 try {
-                    if (!static_cast<bool>(item.pairs[i].value)) {
+                    if (!static_cast<bool>(item.pairs[i].value1)) {
                         /* It's a deletion; we don't need to load anything. */
                         return;
                     }
-                    rassert(item.pairs[i].value->size() == sizeof(void *));
-                    void *value_ptr = *reinterpret_cast<void *const *>(
-                        item.pairs[i].value->data());
-                    item.pairs[i].value->clear();
-                    item_consumer->copy_value(buf_parent_t(&buf->lock), value_ptr,
-                        keepalive.get_drain_signal(), &*item.pairs[i].value);
+                    std::vector<char> val = std::move(*item.pairs[i].value1);
+                    item.pairs[i].value1->clear();
+                    item_consumer->copy_value(buf_parent_t(&buf->lock), bf_value{std::move(val)},
+                        keepalive.get_drain_signal(), &*item.pairs[i].value1);
                 } catch (const interrupted_exc_t &) {
                     /* we'll check this outside the `pmap()` */
                 }
@@ -429,7 +433,9 @@ private:
                         /* Store `value_or_null` in the `value` field as a sequence of
                         8 (or 4 or whatever) `char`s describing its actual pointer value.
                         */
-                        item.pairs[i].value.set(std::vector<char>(
+                        // TODO: This is now broken.  And unused.  This code should be removed.
+                        unreachable();
+                        item.pairs[i].value1.set(std::vector<char>(
                             reinterpret_cast<const char *>(&value_or_null),
                             reinterpret_cast<const char *>(1 + &value_or_null)));
                     }
@@ -537,7 +543,9 @@ private:
                         /* Store `value_or_null` in the `value` field as a sequence of
                         8 (or 4 or whatever) `char`s describing its actual pointer value.
                         */
-                        item->pairs[i].value.set(std::vector<char>(
+                        // TODO: This code should not exist.
+                        unreachable();
+                        item->pairs[i].value1.set(std::vector<char>(
                             reinterpret_cast<const char *>(&value_or_null),
                             reinterpret_cast<const char *>(1 + &value_or_null)));
                     }
@@ -604,11 +612,13 @@ private:
         for (const auto &pair : item->pairs) {
             /* Compute the amount of memory needed for the pair */
             size_t pair_size;
-            if (static_cast<bool>(pair.value)) {
+            if (static_cast<bool>(pair.value1)) {
                 /* It's not a deletion */
-                rassert(pair.value->size() == sizeof(void *));
+                // TODO: This code should be removed.  Anyway this uses value incorrectly.
+                unreachable();
+                rassert(pair.value1->size() == sizeof(void *));
                 const void *value_ptr = *reinterpret_cast<void *const *>(
-                    pair.value->data());
+                    pair.value1->data());
                 size_t value_size =
                     static_cast<size_t>(loader->size_value(parent, value_ptr));
                 pair_size = pair.get_mem_size_with_value(value_size);
@@ -686,32 +696,141 @@ private:
     backfill_item_memory_tracker_t *memory_tracker;
 };
 
+continue_bool_t send_all_in_keyrange(
+        rockshard rocksh, real_superblock_t *superblock, release_superblock_t release_superblock,
+        const key_range_t &range,
+        repli_timestamp_t reference_timestamp, btree_backfill_item_consumer_t *item_consumer,
+        backfill_item_memory_tracker_t *memory_tracker,
+        signal_t *interruptor) {
+    // TODO: Use memory_tracker??
+    (void)memory_tracker;
+    (void)interruptor;  // TODO: Use interruptor.
+    (void)reference_timestamp;  // TODO: Use this?
+    rocksdb::OptimisticTransactionDB *db = rocksh.rocks->db();
+
+    std::string rocks_kv_prefix = rockstore::table_primary_prefix(rocksh.table_id, rocksh.shard_no);
+
+    std::string left = rocks_kv_prefix + key_to_unescaped_str(range.left);
+    std::string right = range.right.unbounded
+        ? rockstore::prefix_end(rocks_kv_prefix)
+        : rocks_kv_prefix + key_to_unescaped_str(range.right.key());
+
+    rocksdb::Slice right_slice(right.data(), right.size());
+
+    // rocksdb::ReadOptions()
+    rocksdb::ReadOptions opts;
+    opts.iterate_upper_bound = &right_slice;
+
+    // TODO: Must NewIterator be in a blocker thread?
+    // TODO: With all superblock read_acq_signals... use the interruptor?
+    superblock->read_acq_signal()->wait_lazily_unordered();
+    repli_timestamp_t max_timestamp = superblock->get()->get_recency();
+    scoped_ptr_t<rocksdb::Iterator> iter(db->NewIterator(rocksdb::ReadOptions()));
+    if (release_superblock == release_superblock_t::RELEASE) {
+        superblock->release();
+    }
+
+    bool was_valid = iter->Valid();
+    rocksdb::Slice key_slice;
+    rocksdb::Slice value_slice;
+    linux_thread_pool_t::run_in_blocker_pool([&]() {
+        iter->Seek(left);
+        was_valid = iter->Valid();
+
+        if (was_valid) {
+            key_slice = iter->key();
+            value_slice = iter->value();
+        }
+    });
+
+
+    // Now walk through the store.
+    // TODO: What do we use memory tracker for?
+    for (;;) {
+        if (interruptor->is_pulsed()) {
+            return continue_bool_t::ABORT;  // TODO: Is that right?
+        }
+        if (!was_valid) {
+            break;
+        }
+
+        key_slice.remove_prefix(rocks_kv_prefix.size());
+
+        // TODO: Batch backfill items.  (It seems nice.)
+
+        // TODO: pair.value is actually an rdb_value_t.
+
+        backfill_item_t::pair_t pair;
+        pair.key.assign(key_slice.size(), reinterpret_cast<const uint8_t *>(key_slice.data()));
+        pair.recency = max_timestamp;  // TODO: At some point, more appropriate.
+        pair.value1 = make_optional(std::vector<char>(value_slice.data(), value_slice.data() + value_slice.size()));
+
+        backfill_item_t item;
+        item.range = key_range_t::one_key(pair.key);
+        item.min_deletion_timestamp = max_timestamp;  // TODO: A gross hack, but we can't do better for now.
+        item.pairs.push_back(std::move(pair));
+
+        if (continue_bool_t::ABORT == item_consumer->on_item(std::move(item))) {
+            return continue_bool_t::ABORT;
+        }
+        linux_thread_pool_t::run_in_blocker_pool([&]() {
+            iter->Next();
+
+            was_valid = iter->Valid();
+
+            if (was_valid) {
+                key_slice = iter->key();
+                value_slice = iter->value();
+            }
+        });
+    }
+
+    iter.reset();  // Might as well destroy asap.
+    return item_consumer->on_empty_range(range.right);
+}
+
+void ignore_all_pre_items(
+        auto_drainer_t::lock_t lock, key_range_t key_range,
+        btree_backfill_pre_item_producer_t *pre_item_producer) {
+    coro_t::spawn_later_ordered([lock, key_range, pre_item_producer]() {
+        key_range_t::right_bound_t cursor(key_range.left);
+        std::function<void(const backfill_pre_item_t &)> func = [](const backfill_pre_item_t &) {};
+        while (cursor != key_range.right) {
+            continue_bool_t cont = pre_item_producer->consume_range(&cursor, key_range.right, func);
+            if (cont == continue_bool_t::ABORT) {
+                return;
+            }
+        }
+    });
+}
+
 continue_bool_t btree_send_backfill(
+        rockshard rocksh,
         real_superblock_t *superblock,
         release_superblock_t release_superblock,
-        value_sizer_t *sizer,
         const key_range_t &range,
         repli_timestamp_t reference_timestamp,
         btree_backfill_pre_item_producer_t *pre_item_producer,
         btree_backfill_item_consumer_t *item_consumer,
         backfill_item_memory_tracker_t *memory_tracker,
         signal_t *interruptor) {
-    backfill_debug_range(range, strprintf(
-        "btree_send_backfill %" PRIu64, reference_timestamp.longtime));
-    cond_t abort_cond;
-    backfill_item_loader_t loader(item_consumer, &abort_cond);
-    backfill_item_preparer_t preparer(
-        sizer, reference_timestamp, pre_item_producer, &abort_cond, &loader,
-        memory_tracker);
-    continue_bool_t cont = btree_depth_first_traversal(
-            superblock, range, &preparer, access_t::read, direction_t::forward, release_superblock,
-            interruptor);
-    /* Wait for `loader` to finish what it's doing, even if `btree_pre_item_producer`
-    aborted. This is important so that we can make progress even if
-    `btree_pre_item_producer` only gives us a couple of pre-items at a time. */
-    loader.finish(interruptor);
-    return abort_cond.is_pulsed() ? continue_bool_t::ABORT : cont;
+    // I don't know whether backfill pre-items are throttled based on incoming
+    // backfill information or pre-item acks or what.  So we're going to consume
+    // (and ignore) pre-items in one coroutine and send backfill items in
+    // another.
+    auto_drainer_t drainer;
+    ignore_all_pre_items(drainer.lock(), range, pre_item_producer);
+
+    continue_bool_t cont = send_all_in_keyrange(
+        rocksh, superblock, release_superblock, range, reference_timestamp, item_consumer,
+        memory_tracker, interruptor);
+
+    drainer.drain();
+    // TODO: When would we abort?
+    return cont;
 }
+
+// TODO: Remove.. all these functions.
 
 class backfill_deletion_timestamp_updater_t : public depth_first_traversal_callback_t {
 public:

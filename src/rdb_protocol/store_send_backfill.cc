@@ -174,29 +174,14 @@ public:
         return remaining == 0
             ? continue_bool_t::ABORT : continue_bool_t::CONTINUE;
     }
+    // TODO: Just remove copy_value.
     void copy_value(
             buf_parent_t parent,
-            const void *value_in_leaf_node,
+            bf_value &&value_in_leaf_node,
             UNUSED signal_t *interruptor2,
             std::vector<char> *value_out) {
-        const rdb_value_t *v =
-            static_cast<const rdb_value_t *>(value_in_leaf_node);
-        rdb_blob_wrapper_t blob_wrapper(
-            parent.cache()->max_block_size(),
-            const_cast<rdb_value_t *>(v)->value_ref(),
-            blob::btree_maxreflen);
-        blob_acq_t acq_group;
-        buffer_group_t buffer_group;
-        blob_wrapper.expose_all(
-            parent, access_t::read, &buffer_group, &acq_group);
-        value_out->resize(buffer_group.get_size());
-        size_t offset = 0;
-        for (size_t i = 0; i < buffer_group.num_buffers(); ++i) {
-            buffer_group_t::buffer_t b = buffer_group.get_buffer(i);
-            memcpy(value_out->data() + offset, b.data, b.size);
-            offset += b.size;
-        }
-        guarantee(offset == value_out->size());
+        (void)parent, (void)interruptor2;
+        *value_out = std::move(value_in_leaf_node.value);
     }
     int64_t size_value(
             buf_parent_t parent,
@@ -267,8 +252,8 @@ continue_bool_t store_t::send_backfill(
             rdb_value_sizer_t sizer(cache->max_block_size());
             key_range_t to_do = pair.first;
             to_do.left = threshold.key();
-            continue_bool_t cont = btree_send_backfill(sb.get(),
-                release_superblock_t::RELEASE, &sizer, to_do, pair.second,
+            continue_bool_t cont = btree_send_backfill(
+                rocksh(), sb.get(), release_superblock_t::RELEASE, to_do, pair.second,
                 &pre_item_adapter, &limiter, memory_tracker, interruptor);
 
             /* Check if the backfill was aborted because of exhausting the memory

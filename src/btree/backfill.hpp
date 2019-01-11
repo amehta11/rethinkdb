@@ -17,8 +17,17 @@
 
 class buf_parent_t;
 class real_superblock_t;
+class rockshard;
 class superblock_t;
 class value_sizer_t;
+
+// TODO: Remove.
+struct bf_value {
+    std::vector<char> value;
+};
+
+// TODO: Under rocksdb (and an incompatible cluster protocol),
+// backfill_pre_item_t can hold individual keys.
 
 /* `backfill_pre_item_t` describes a range of keys which have changed on the backfill
 destination since the source and destination diverged. The backfill destination sends
@@ -49,11 +58,11 @@ public:
     public:
         store_key_t key;
         repli_timestamp_t recency;
-        optional<std::vector<char> > value;   /* empty indicates deletion */
+        optional<std::vector<char> > value1;   /* empty indicates deletion */
         size_t get_mem_size() const {
             size_t s = sizeof(pair_t);
-            if (static_cast<bool>(value)) {
-                s += value->size();
+            if (static_cast<bool>(value1)) {
+                s += value1->size();
             }
             return s;
         }
@@ -98,6 +107,8 @@ public:
     key_range_t range;
     std::vector<pair_t> pairs;
     repli_timestamp_t min_deletion_timestamp;
+
+    // TODO: This, and update or just plain alter the clustering communication format.
 
     /* TODO: For single-key items, this is not very memory-efficient, because we store
     the key in three places: in `pairs[0].key`, in `range.left`, and in `range.right.key`
@@ -205,7 +216,7 @@ public:
     the B-tree logic. `copy_value()` may block. */
     virtual void copy_value(
         buf_parent_t buf_parent,
-        const void *value_in_leaf_node,
+        bf_value &&value_in_leaf_node,
         signal_t *interruptor,
         std::vector<char> *value_out) = 0;
     /* Similarly `size_value()` is responsible for retrieving the size of a given
@@ -218,15 +229,16 @@ protected:
 };
 
 continue_bool_t btree_send_backfill(
-    real_superblock_t *superblock,
-    release_superblock_t release_superblock,
-    value_sizer_t *sizer,
-    const key_range_t &range,
-    repli_timestamp_t reference_timestamp,
-    btree_backfill_pre_item_producer_t *pre_item_producer,
-    btree_backfill_item_consumer_t *item_consumer,
-    backfill_item_memory_tracker_t *memory_tracker,
-    signal_t *interruptor);
+        rockshard rocksh,
+        real_superblock_t *superblock,
+        release_superblock_t release_superblock,
+        const key_range_t &range,
+        repli_timestamp_t reference_timestamp,
+        btree_backfill_pre_item_producer_t *pre_item_producer,
+        btree_backfill_item_consumer_t *item_consumer,
+        backfill_item_memory_tracker_t *memory_tracker,
+        signal_t *interruptor);
+
 
 /* There's no such thing as `btree_receive_backfill()`; the RDB protocol code is
 responsible for interpreting the `backfill_item_t`s and translating them into a series
