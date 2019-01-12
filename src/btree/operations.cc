@@ -478,10 +478,8 @@ void apply_keyvalue_change(
         keyvalue_location_t *kv_loc,
         const btree_key_t *key, repli_timestamp_t tstamp,
         const value_deleter_t *balancing_detacher,
-        key_modification_callback_t *km_callback,
         delete_mode_t delete_mode) {
-    key_modification_proof_t km_proof
-        = km_callback->value_modification(kv_loc, key);
+    key_modification_proof_t km_proof = key_modification_proof_t::real_proof();
 
     /* how much this keyvalue change affects the total population of the btree
      * (should be -1, 0 or 1) */

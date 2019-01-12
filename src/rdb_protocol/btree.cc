@@ -137,9 +137,8 @@ void kv_location_delete(rockstore::store *rocks,
 
     kv_location->value.reset();
     rdb_value_sizer_t sizer(block_size);
-    null_key_modification_callback_t null_cb;
     apply_keyvalue_change(&sizer, kv_location, key.btree_key(), timestamp,
-            deletion_context->balancing_detacher(), &null_cb, delete_mode);
+            deletion_context->balancing_detacher(), delete_mode);
 
     // TODO: We need to update the rocks secondary indexes (after primary key deletion), _transactionally_.
     rocks->remove(rocks_kv_location, rockstore::write_options::TODO());
@@ -189,11 +188,10 @@ kv_location_set(rockstore::store *rocks,
 
     // Actually update the leaf, if needed.
     kv_location->value = std::move(new_value);
-    null_key_modification_callback_t null_cb;
     rdb_value_sizer_t sizer(block_size);
     apply_keyvalue_change(&sizer, kv_location, key.btree_key(),
                           timestamp,
-                          deletion_context->balancing_detacher(), &null_cb,
+                          deletion_context->balancing_detacher(),
                           delete_mode_t::REGULAR_QUERY);
 
     {
