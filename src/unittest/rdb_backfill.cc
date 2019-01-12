@@ -81,7 +81,6 @@ private:
     void write(const std::string &key, const std::string &value,
             order_token_t otok, signal_t *interruptor) {
         write_t _write;
-        printf("Writing '%s' => '%s'\n", key.c_str(), value.c_str());
         if (!value.empty()) {
             ql::datum_object_builder_t doc;
             doc.overwrite("id", ql::datum_t(datum_string_t(key)));
@@ -465,7 +464,7 @@ TPTEST(RDBBackfill, SmallValues) {
     run_backfill_test(cfg);
 }
 
-TPTEST(RDBBackfill, LargeTable) {
+TPTEST(RDBBackfill, DISABLED_LargeTable) {
     /* This approximates a realistic backfill scenario. So we insert a relatively large
     number of keys. */
     backfill_test_config_t cfg;
