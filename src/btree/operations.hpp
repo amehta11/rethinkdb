@@ -24,8 +24,6 @@ namespace profile {
 class trace_t;
 }
 
-class value_deleter_t;
-
 enum cache_snapshotted_t { CACHE_SNAPSHOTTED_NO, CACHE_SNAPSHOTTED_YES };
 
 /* An abstract superblock provides the starting point for performing B-tree operations.
@@ -119,23 +117,6 @@ public:
     superblock_t *superblock;
     promise_t<superblock_t *> *pass_back_superblock;
 };
-
-
-buf_lock_t get_root(value_sizer_t *sizer, superblock_t *sb);
-
-void check_and_handle_split(value_sizer_t *sizer,
-                            buf_lock_t *buf,
-                            buf_lock_t *last_buf,
-                            superblock_t *sb,
-                            const btree_key_t *key, void *new_value,
-                            const value_deleter_t *detacher);
-
-void check_and_handle_underfull(value_sizer_t *sizer,
-                                buf_lock_t *buf,
-                                buf_lock_t *last_buf,
-                                superblock_t *sb,
-                                const btree_key_t *key,
-                                const value_deleter_t *detacher);
 
 /* Set sb to have root id as its root block and release sb */
 void insert_root(block_id_t root_id, superblock_t *sb);
