@@ -117,7 +117,7 @@ void resume_construct_sindex(
                 return;
             }
             buf_lock_t sindex_block(superblock->expose_buf(),
-                                    superblock->get_sindex_block_id(),
+                                    superblock->get_sindex_block_id(store->rocksh()),
                                     access_t::write);
             superblock.reset();
 
@@ -230,7 +230,7 @@ void post_construct_and_drain_queue(
                 &queue_superblock,
                 lock.get_drain_signal());
 
-            block_id_t sindex_block_id = queue_superblock->get_sindex_block_id();
+            block_id_t sindex_block_id = queue_superblock->get_sindex_block_id(store->rocksh());
 
             buf_lock_t queue_sindex_block(queue_superblock->expose_buf(),
                                           sindex_block_id,
@@ -356,7 +356,7 @@ void post_construct_and_drain_queue(
             &queue_superblock,
             &non_interruptor);
 
-        block_id_t sindex_block_id = queue_superblock->get_sindex_block_id();
+        block_id_t sindex_block_id = queue_superblock->get_sindex_block_id(store->rocksh());
 
         buf_lock_t queue_sindex_block(queue_superblock->expose_buf(),
                                       sindex_block_id,

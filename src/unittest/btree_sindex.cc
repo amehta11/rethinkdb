@@ -64,7 +64,7 @@ TPTEST(BTreeSindex, LowLevelOps) {
                 &superblock, &txn);
 
             buf_lock_t sindex_block(superblock->expose_buf(),
-                superblock->get_sindex_block_id(),
+                superblock->get_sindex_block_id(rocksh),
                 access_t::write);
 
             initialize_secondary_indexes(rockshard(io_backender.rocks(), table_id, 0), &sindex_block);
@@ -96,7 +96,7 @@ TPTEST(BTreeSindex, LowLevelOps) {
                 &txn);
             buf_lock_t sindex_block(
                 superblock->expose_buf(),
-                superblock->get_sindex_block_id(),
+                superblock->get_sindex_block_id(rocksh),
                 access_t::write);
 
             set_secondary_index(rocksh, &sindex_block, name, s);
@@ -118,7 +118,7 @@ TPTEST(BTreeSindex, LowLevelOps) {
                 &txn);
             buf_lock_t sindex_block(
                 superblock->expose_buf(),
-                superblock->get_sindex_block_id(),
+                superblock->get_sindex_block_id(rocksh),
                 access_t::write);
 
             std::map<sindex_name_t, secondary_index_t> sindexes;
@@ -199,7 +199,7 @@ TPTEST(BTreeSindex, BtreeStoreAPI) {
 
                 buf_lock_t sindex_block(
                     super_block->expose_buf(),
-                    super_block->get_sindex_block_id(),
+                    super_block->get_sindex_block_id(store.rocksh()),
                     access_t::write);
 
                 index_id = store.add_sindex_internal(
@@ -223,7 +223,7 @@ TPTEST(BTreeSindex, BtreeStoreAPI) {
 
                 buf_lock_t sindex_block(
                     super_block->expose_buf(),
-                    super_block->get_sindex_block_id(),
+                    super_block->get_sindex_block_id(store.rocksh()),
                     access_t::write);
 
                 store.mark_index_up_to_date(*index_id, &sindex_block, key_range_t::empty());

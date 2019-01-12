@@ -96,7 +96,7 @@ void store_t::help_construct_bring_sindexes_up_to_date() {
                                  &dummy_interruptor);
 
     buf_lock_t sindex_block(superblock->expose_buf(),
-                            superblock->get_sindex_block_id(),
+                            superblock->get_sindex_block_id(rocksh()),
                             access_t::write);
 
     superblock.reset();
@@ -943,7 +943,7 @@ struct rdb_write_visitor_t : public boost::static_visitor<void> {
         sampler(_sampler),
         trace(_trace),
         sindex_block(superblock->expose_buf(),
-                     superblock->get_sindex_block_id(),
+                     superblock->get_sindex_block_id(store->rocksh()),
                      access_t::write) {
     }
 
