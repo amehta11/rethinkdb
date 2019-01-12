@@ -2,7 +2,6 @@
 #include "clustering/administration/persist/file.hpp"
 
 #include "arch/io/disk.hpp"
-#include "btree/depth_first_traversal.hpp"
 #include "btree/types.hpp"
 #include "buffer_cache/blob.hpp"
 #include "buffer_cache/cache_balancer.hpp"
