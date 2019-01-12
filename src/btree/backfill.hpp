@@ -19,7 +19,6 @@ class buf_parent_t;
 class real_superblock_t;
 class rockshard;
 class superblock_t;
-class value_sizer_t;
 
 // TODO: Remove.
 struct bf_value {

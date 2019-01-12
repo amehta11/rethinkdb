@@ -6,7 +6,6 @@
 #include <utility>
 #include <vector>
 
-#include "btree/node.hpp"
 #include "buffer_cache/alt.hpp"
 #include "concurrency/fifo_enforcer.hpp"
 #include "concurrency/new_semaphore.hpp"
