@@ -53,11 +53,11 @@ continue_bool_t btree_send_backfill_pre(
 
     superblock->read_acq_signal()->wait_lazily_unordered();
     // We just request the entire range at once, since we lack timestamp data on rocksdb.
-    pre_item_consumer->on_pre_item(backfill_pre_item_t{range});
+    continue_bool_t cont = pre_item_consumer->on_pre_item(backfill_pre_item_t{range});
     if (release_superblock == release_superblock_t::RELEASE) {
         superblock->release();
     }
-    return continue_bool_t::CONTINUE;
+    return cont;
 }
 
 continue_bool_t send_all_in_keyrange(
