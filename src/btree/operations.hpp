@@ -6,7 +6,6 @@
 #include <utility>
 #include <vector>
 
-#include "btree/leaf_node.hpp"
 #include "btree/node.hpp"
 #include "buffer_cache/alt.hpp"
 #include "concurrency/fifo_enforcer.hpp"
@@ -118,8 +117,6 @@ public:
     promise_t<superblock_t *> *pass_back_superblock;
 };
 
-/* Set sb to have root id as its root block and release sb */
-void insert_root(block_id_t root_id, superblock_t *sb);
 
 /* Create a stat block suitable for storing in a superblock and returning from
 `get_stat_block_id()`. */
