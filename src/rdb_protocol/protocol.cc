@@ -116,9 +116,8 @@ void resume_construct_sindex(
             } catch (const interrupted_exc_t &) {
                 return;
             }
-            sindex_block_lock_t sindex_block(
+            sindex_block_lock sindex_block(
                 superblock->get(),
-                superblock->get_sindex_block_id(store->rocksh()),
                 access_t::write);
             superblock.reset();
 
@@ -231,11 +230,8 @@ void post_construct_and_drain_queue(
                 &queue_superblock,
                 lock.get_drain_signal());
 
-            block_id_t sindex_block_id = queue_superblock->get_sindex_block_id(store->rocksh());
-
-            sindex_block_lock_t queue_sindex_block(
+            sindex_block_lock queue_sindex_block(
                 queue_superblock->get(),
-                sindex_block_id,
                 access_t::write);
 
             queue_superblock->release();
@@ -358,11 +354,8 @@ void post_construct_and_drain_queue(
             &queue_superblock,
             &non_interruptor);
 
-        block_id_t sindex_block_id = queue_superblock->get_sindex_block_id(store->rocksh());
-
-        sindex_block_lock_t queue_sindex_block(
+        sindex_block_lock queue_sindex_block(
             queue_superblock->get(),
-            sindex_block_id,
             access_t::write);
 
         queue_superblock->release();
