@@ -63,7 +63,7 @@ TPTEST(BTreeSindex, LowLevelOps) {
                 write_durability_t::SOFT,
                 &superblock, &txn);
 
-            sindex_block_lock_t sindex_block(superblock->expose_buf(),
+            sindex_block_lock_t sindex_block(superblock->get(),
                 superblock->get_sindex_block_id(rocksh),
                 access_t::write);
 
@@ -95,7 +95,7 @@ TPTEST(BTreeSindex, LowLevelOps) {
                 &superblock,
                 &txn);
             sindex_block_lock_t sindex_block(
-                superblock->expose_buf(),
+                superblock->get(),
                 superblock->get_sindex_block_id(rocksh),
                 access_t::write);
 
@@ -117,7 +117,7 @@ TPTEST(BTreeSindex, LowLevelOps) {
                 &superblock,
                 &txn);
             sindex_block_lock_t sindex_block(
-                superblock->expose_buf(),
+                superblock->get(),
                 superblock->get_sindex_block_id(rocksh),
                 access_t::write);
 
@@ -198,7 +198,7 @@ TPTEST(BTreeSindex, BtreeStoreAPI) {
                     &txn, &super_block, &dummy_interruptor);
 
                 sindex_block_lock_t sindex_block(
-                    super_block->expose_buf(),
+                    super_block->get(),
                     super_block->get_sindex_block_id(store.rocksh()),
                     access_t::write);
 
@@ -222,7 +222,7 @@ TPTEST(BTreeSindex, BtreeStoreAPI) {
                     &txn, &super_block, &dummy_interruptor);
 
                 sindex_block_lock_t sindex_block(
-                    super_block->expose_buf(),
+                    super_block->get(),
                     super_block->get_sindex_block_id(store.rocksh()),
                     access_t::write);
 
