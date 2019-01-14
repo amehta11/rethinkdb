@@ -11,13 +11,9 @@
 #include "concurrency/rwlock.hpp"
 #include "containers/archive/string_stream.hpp"
 #include "rockstore/write_options.hpp"
-#include "serializer/types.hpp"
 
 class base_path_t;
 class io_backender_t;
-class merger_serializer_t;
-class filepath_file_opener_t;
-class serializer_filepath_t;
 
 class file_in_use_exc_t : public std::exception {
 public:
