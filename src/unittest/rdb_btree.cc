@@ -242,14 +242,8 @@ void check_keys_are_NOT_present(store_t *store,
 
 TPTEST(RDBBtree, SindexPostConstruct) {
     recreate_temporary_directory(base_path_t("."));
-    temp_file_t temp_file;
     temp_rockstore temp_rocks;
     io_backender_t io_backender(temp_rocks.rocks(), file_direct_io_mode_t::buffered_desired);
-
-    filepath_file_opener_t file_opener(temp_file.name(), &io_backender);
-    log_serializer_t::create(
-        &file_opener,
-        log_serializer_t::static_config_t());
 
     store_t store(
             region_t::universe(),
@@ -279,14 +273,8 @@ TPTEST(RDBBtree, SindexPostConstruct) {
 
 TPTEST(RDBBtree, SindexEraseRange) {
     recreate_temporary_directory(base_path_t("."));
-    temp_file_t temp_file;
     temp_rockstore temp_rocks;
     io_backender_t io_backender(temp_rocks.rocks(), file_direct_io_mode_t::buffered_desired);
-
-    filepath_file_opener_t file_opener(temp_file.name(), &io_backender);
-    log_serializer_t::create(
-        &file_opener,
-        log_serializer_t::static_config_t());
 
     store_t store(
             region_t::universe(),
@@ -358,14 +346,8 @@ TPTEST(RDBBtree, SindexEraseRange) {
 
 TPTEST(RDBBtree, SindexInterruptionViaDrop) {
     recreate_temporary_directory(base_path_t("."));
-    temp_file_t temp_file;
     temp_rockstore temp_rocks;
     io_backender_t io_backender(temp_rocks.rocks(), file_direct_io_mode_t::buffered_desired);
-
-    filepath_file_opener_t file_opener(temp_file.name(), &io_backender);
-    log_serializer_t::create(
-        &file_opener,
-        log_serializer_t::static_config_t());
 
     store_t store(
             region_t::universe(),
@@ -395,14 +377,8 @@ TPTEST(RDBBtree, SindexInterruptionViaDrop) {
 
 TPTEST(RDBBtree, SindexInterruptionViaStoreDelete) {
     recreate_temporary_directory(base_path_t("."));
-    temp_file_t temp_file;
     temp_rockstore temp_rocks;
     io_backender_t io_backender(temp_rocks.rocks(), file_direct_io_mode_t::buffered_desired);
-
-    filepath_file_opener_t file_opener(temp_file.name(), &io_backender);
-    log_serializer_t::create(
-        &file_opener,
-        log_serializer_t::static_config_t());
 
     scoped_ptr_t<store_t> store(new store_t(
             region_t::universe(),
