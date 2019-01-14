@@ -17,7 +17,6 @@
 
 class real_superblock_t;
 class rockshard;
-class superblock_t;
 
 
 // TODO: Under rocksdb (and an incompatible cluster protocol),
