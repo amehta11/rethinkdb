@@ -6,7 +6,6 @@
 #include "arch/timing.hpp"
 #include "btree/operations.hpp"
 #include "btree/reql_specific.hpp"
-#include "buffer_cache/cache_balancer.hpp"
 #include "containers/archive/boost_types.hpp"
 #include "containers/archive/vector_stream.hpp"
 #include "containers/uuid.hpp"
@@ -246,7 +245,6 @@ TPTEST(RDBBtree, SindexPostConstruct) {
     temp_file_t temp_file;
     temp_rockstore temp_rocks;
     io_backender_t io_backender(temp_rocks.rocks(), file_direct_io_mode_t::buffered_desired);
-    dummy_cache_balancer_t balancer(GIGABYTE);
 
     filepath_file_opener_t file_opener(temp_file.name(), &io_backender);
     log_serializer_t::create(
@@ -263,7 +261,6 @@ TPTEST(RDBBtree, SindexPostConstruct) {
             0,
             io_backender.rocks(),
             &serializer,
-            &balancer,
             "unit_test_store",
             true,
             &get_global_perfmon_collection(),
@@ -291,7 +288,6 @@ TPTEST(RDBBtree, SindexEraseRange) {
     temp_file_t temp_file;
     temp_rockstore temp_rocks;
     io_backender_t io_backender(temp_rocks.rocks(), file_direct_io_mode_t::buffered_desired);
-    dummy_cache_balancer_t balancer(GIGABYTE);
 
     filepath_file_opener_t file_opener(temp_file.name(), &io_backender);
     log_serializer_t::create(
@@ -308,7 +304,6 @@ TPTEST(RDBBtree, SindexEraseRange) {
             0,
             io_backender.rocks(),
             &serializer,
-            &balancer,
             "unit_test_store",
             true,
             &get_global_perfmon_collection(),
@@ -378,7 +373,6 @@ TPTEST(RDBBtree, SindexInterruptionViaDrop) {
     temp_file_t temp_file;
     temp_rockstore temp_rocks;
     io_backender_t io_backender(temp_rocks.rocks(), file_direct_io_mode_t::buffered_desired);
-    dummy_cache_balancer_t balancer(GIGABYTE);
 
     filepath_file_opener_t file_opener(temp_file.name(), &io_backender);
     log_serializer_t::create(
@@ -395,7 +389,6 @@ TPTEST(RDBBtree, SindexInterruptionViaDrop) {
             0,
             io_backender.rocks(),
             &serializer,
-            &balancer,
             "unit_test_store",
             true,
             &get_global_perfmon_collection(),
@@ -423,7 +416,6 @@ TPTEST(RDBBtree, SindexInterruptionViaStoreDelete) {
     temp_file_t temp_file;
     temp_rockstore temp_rocks;
     io_backender_t io_backender(temp_rocks.rocks(), file_direct_io_mode_t::buffered_desired);
-    dummy_cache_balancer_t balancer(GIGABYTE);
 
     filepath_file_opener_t file_opener(temp_file.name(), &io_backender);
     log_serializer_t::create(
@@ -440,7 +432,6 @@ TPTEST(RDBBtree, SindexInterruptionViaStoreDelete) {
             0,
             io_backender.rocks(),
             &serializer,
-            &balancer,
             "unit_test_store",
             true,
             &get_global_perfmon_collection(),
