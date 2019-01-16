@@ -36,8 +36,7 @@ void backfill_item_t::mask_in_place(const key_range_t &m) {
 
 
 continue_bool_t btree_send_backfill_pre(
-        real_superblock_t *superblock,
-        release_superblock_t release_superblock,
+        scoped_ptr_t<real_superblock_t> &&superblock,
         const key_range_t &range,
         repli_timestamp_t reference_timestamp,
         btree_backfill_pre_item_consumer_t *pre_item_consumer,
@@ -50,9 +49,7 @@ continue_bool_t btree_send_backfill_pre(
     superblock->read_acq_signal()->wait_lazily_ordered();
     // We just request the entire range at once, since we lack timestamp data on rocksdb.
     continue_bool_t cont = pre_item_consumer->on_pre_item(backfill_pre_item_t{range});
-    if (release_superblock == release_superblock_t::RELEASE) {
-        superblock->release();
-    }
+    superblock.reset();
     return cont;
 }
 
